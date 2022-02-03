@@ -87,8 +87,8 @@ class CongestionControlService(
 
     # Sends an action reading and writing on the two pipes shared with the
     # main process
-    def make_action(self,
-                    parameter: int) -> congestion_control_pb2.Action:
+    def _make_action(self,
+                     parameter: int) -> congestion_control_pb2.Action:
         self._send_state(parameter)
         action = self._get_action()
         print("Received Action: ", action)
@@ -116,7 +116,7 @@ class CongestionControlService(
                 # Environment in a different thread and wait for response
                 action = await asyncio.get_event_loop(). \
                     run_in_executor(None,
-                                    self.make_action,
+                                    self._make_action,
                                     status.parameter_1)
                 yield action
 
