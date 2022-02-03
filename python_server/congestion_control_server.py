@@ -74,12 +74,12 @@ def compute_statistics(parameter_1: int,
 
 def get_prediction(action_queue: Queue):
     action = action_queue.get()
-    print(action)
+    print("Received Action: ", action)
     return action
 
 
-def put_state(state_queue: Queue):
-    state_queue.put(1)
+def put_state(state_queue: Queue, action):
+    state_queue.put(action)
 
 
 class CongestionControlService(
@@ -104,7 +104,8 @@ class CongestionControlService(
             )
 
             await asyncio.get_event_loop().run_in_executor(None, put_state,
-                                                           self._state_queue)
+                                                           self._state_queue,
+                                                           status.parameter_1)
             prediction = await asyncio.get_event_loop().run_in_executor(None,
                                                                         get_prediction,
                                                                         self._action_queue)

@@ -54,10 +54,16 @@ class CongestionControlEnv(Env):
         self._server_process.start()
 
     def _get_state(self):
-        return self._state_queue.get()
+        self.state = self._state_queue.get()
+        print("Received State: ", self.state)
+        return self.state
 
     def _next_observation(self) -> np.array:
         return np.array([self._get_state(), 0])
+
+    def _put_action(self, action):
+        print("Performing Action: ", action)
+        self._action_queue.put(action)
 
     def _get_reward(self) -> float:
         return 1.0
@@ -68,7 +74,7 @@ class CongestionControlEnv(Env):
         return self._next_observation()
 
     def step(self, action: np.ndarray) -> GymStepReturn:
-        self._action_queue.put(1)
+        self._put_action(self.state)
         self.current_step += 1
         reward = self._get_reward()
         done = self.current_step >= self.episode_lenght
