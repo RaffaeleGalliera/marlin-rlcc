@@ -12,7 +12,7 @@ class CongestionControlEnv(Env):
                  episode_lenght: int = 1000,
                  eps: float = 0.05,
                  num_actions: int = 4,
-                 observation_length: int = 1):
+                 observation_length: int = 2):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -28,14 +28,15 @@ class CongestionControlEnv(Env):
         self._state_queue = Queue(maxsize=1)
         # Action queue where the agent will publish the action
         self._action_queue = Queue(maxsize=1)
-        # Run server in a different process
-        self._server_process: Process
-        self._run_server_process()
 
         self.current_step = 0
         self.num_resets = -1
         self.eps = eps
-        self.reset()
+        # Run server in a different process
+        self._server_process: Process
+        self._run_server_process()
+
+        # self.reset()
 
     def __del__(self):
         """Book-keeping to release resources"""
@@ -55,8 +56,8 @@ class CongestionControlEnv(Env):
     def _get_state(self):
         return self._state_queue.get()
 
-    def _next_state(self) -> None:
-        self.state = self._get_state()
+    def _next_observation(self) -> np.array:
+        return np.array([self._get_state(), 0])
 
     def _get_reward(self) -> float:
         return 1.0
@@ -64,16 +65,14 @@ class CongestionControlEnv(Env):
     def reset(self) -> GymObs:
         self.current_step = 0
         self.num_resets += 1
-        self._next_state()
-        return self.state
+        return self._next_observation()
 
     def step(self, action: np.ndarray) -> GymStepReturn:
         self._action_queue.put(1)
-        reward = self._get_reward()
-        self._next_state()
         self.current_step += 1
+        reward = self._get_reward()
         done = self.current_step >= self.episode_lenght
-        return self.state, reward, done, {}
+        return self._next_observation(), reward, done, {}
 
     def render(self, mode: str = "console") -> None:
         pass

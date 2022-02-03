@@ -6,6 +6,7 @@ from typing import AsyncIterable, Optional, Union
 from functools import wraps, partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
+import time
 import grpc
 from protos import congestion_control_pb2, congestion_control_pb2_grpc
 from multiprocessing import Queue
@@ -71,33 +72,29 @@ def compute_statistics(parameter_1: int,
         f" {parameter_3}")
 
 
+def get_prediction(action_queue: Queue):
+    action = action_queue.get()
+    print(action)
+    return action
+
+
+def put_state(state_queue: Queue):
+    state_queue.put(1)
+
+
 class CongestionControlService(
     congestion_control_pb2_grpc.CongestionControlServicer):
     """Implements methods for Communication during the Congestion Control"""
-    def __init__(self, action_queue: Queue, state_queue: Queue):
+
+    def __init__(self, action_queue, state_queue):
         self._action_queue = action_queue
         self._state_queue = state_queue
-
-    @background_awaitable(
-        loop=asyncio.new_event_loop(),
-        executor=ThreadPoolExecutor(),
-    )
-    def get_prediction(self):
-        return self._action_queue.get()
-
-    @background_awaitable(
-        loop=asyncio.new_event_loop(),
-        executor=ThreadPoolExecutor(),
-    )
-    def put_state(self, state):
-        return self._state_queue.put(state)
 
     async def OptimizeCongestionControl(self,
                                         request_iterator: AsyncIterable[
                                             congestion_control_pb2.TransmissionStatus],
                                         unused_context) -> AsyncIterable[
         congestion_control_pb2.Action]:
-
         async for status in request_iterator:
             await asyncio.sleep(0.1)
             compute_statistics(
@@ -105,12 +102,16 @@ class CongestionControlService(
                 status.parameter_2,
                 status.parameter_3
             )
-            yield self.put_state(status.parameter_1)
-            yield self.get_prediction()
+
+            await asyncio.get_event_loop().run_in_executor(None, put_state,
+                                                           self._state_queue)
+            prediction = await asyncio.get_event_loop().run_in_executor(None,
+                                                                        get_prediction,
+                                                                        self._action_queue)
+            yield make_action(prediction)
 
 
-async def serve(action_queue: Queue,
-                state_queue: Queue) -> None:
+async def serve(action_queue: Queue, state_queue: Queue) -> None:
     server = grpc.aio.server()
     congestion_control_pb2_grpc.add_CongestionControlServicer_to_server(
         CongestionControlService(action_queue, state_queue),
@@ -122,6 +123,8 @@ async def serve(action_queue: Queue,
     await server.wait_for_termination()
 
 
-def run(action_queue: Queue, state_queue: Queue) -> None:
+def run(action_queue: Queue,
+        state_queue: Queue) -> None:
     logging.basicConfig()
-    asyncio.get_event_loop().run_until_complete(serve(action_queue, state_queue))
+    asyncio.get_event_loop().run_until_complete(
+        serve(action_queue, state_queue))
