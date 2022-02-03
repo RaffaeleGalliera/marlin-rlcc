@@ -1,5 +1,6 @@
 """Implementation of the Congestion Control Server"""
 
+from __future__ import print_function
 import asyncio
 import logging
 from typing import AsyncIterable, Optional, Union
@@ -74,6 +75,7 @@ def compute_statistics(parameter_1: int,
 def get_prediction(action_queue: Queue):
     action = action_queue.get()
     print("Received Action: ", action)
+    time.sleep(1)
     return action
 
 
@@ -88,6 +90,7 @@ class CongestionControlService(
     def __init__(self, action_queue, state_queue):
         self._action_queue = action_queue
         self._state_queue = state_queue
+        self._message_n = 0
 
     async def OptimizeCongestionControl(self,
                                         request_iterator: AsyncIterable[
@@ -100,15 +103,17 @@ class CongestionControlService(
                 status.parameter_2,
                 status.parameter_3
             )
+            self._message_n += 1
 
-            await asyncio.sleep(0.1)
-            await asyncio.get_event_loop().run_in_executor(None, put_state,
-                                                           self._state_queue,
-                                                           status.parameter_1)
-            prediction = await asyncio.get_event_loop().run_in_executor(None,
-                                                                        get_prediction,
-                                                                        self._action_queue)
-            yield make_action(prediction)
+            if self._message_n == 3:
+                self._message_n = 0
+                await asyncio.get_event_loop().run_in_executor(None, put_state,
+                                                               self._state_queue,
+                                                               status.parameter_1)
+                prediction = await asyncio.get_event_loop().run_in_executor(None,
+                                                                            get_prediction,
+                                                                            self._action_queue)
+                yield make_action(prediction)
 
 
 async def serve(action_queue: Queue, state_queue: Queue) -> None:
@@ -126,5 +131,7 @@ async def serve(action_queue: Queue, state_queue: Queue) -> None:
 def run(action_queue: Queue,
         state_queue: Queue) -> None:
     logging.basicConfig()
-    asyncio.get_event_loop().run_until_complete(
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(
         serve(action_queue, state_queue))
