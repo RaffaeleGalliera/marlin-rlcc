@@ -59,7 +59,6 @@ def background_awaitable(
 
 # Just a placeholder for the time being
 def make_action(parameter: int) -> congestion_control_pb2.Action:
-    print("Sending action to take")
     return congestion_control_pb2.Action(cwnd_update=parameter)
 
 
@@ -96,13 +95,13 @@ class CongestionControlService(
                                         unused_context) -> AsyncIterable[
         congestion_control_pb2.Action]:
         async for status in request_iterator:
-            await asyncio.sleep(0.1)
             compute_statistics(
                 status.parameter_1,
                 status.parameter_2,
                 status.parameter_3
             )
 
+            await asyncio.sleep(0.1)
             await asyncio.get_event_loop().run_in_executor(None, put_state,
                                                            self._state_queue,
                                                            status.parameter_1)
