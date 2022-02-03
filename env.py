@@ -1,4 +1,4 @@
-import asyncio
+import time
 from multiprocessing import Queue, Process
 import numpy as np
 from gym import Env

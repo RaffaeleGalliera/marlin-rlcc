@@ -1,6 +1,9 @@
 """Implementation of the Congestion Control Server"""
 
 from __future__ import print_function
+import os
+
+os.environ['PYTHONASYNCIODEBUG'] = '1'
 import asyncio
 import logging
 from typing import AsyncIterable, Optional, Union
@@ -59,28 +62,12 @@ def background_awaitable(
 
 
 # Just a placeholder for the time being
-def make_action(parameter: int) -> congestion_control_pb2.Action:
-    return congestion_control_pb2.Action(cwnd_update=parameter)
-
-
-# Just a placeholder for the time being
 def compute_statistics(parameter_1: int,
                        parameter_2: int,
                        parameter_3: int) -> None:
     print(
         f"Received param_1 {parameter_1} param_2 {parameter_2} param_3"
         f" {parameter_3}")
-
-
-def get_prediction(action_queue: Queue):
-    action = action_queue.get()
-    print("Received Action: ", action)
-    time.sleep(1)
-    return action
-
-
-def put_state(state_queue: Queue, action):
-    state_queue.put(action)
 
 
 class CongestionControlService(
@@ -92,6 +79,23 @@ class CongestionControlService(
         self._state_queue = state_queue
         self._message_n = 0
 
+    def _send_state(self, parameter):
+        self._state_queue.put(parameter)
+
+    def _get_action(self):
+        return self._action_queue.get()
+
+    # Sends an action reading and writing on the two pipes shared with the
+    # main process
+    def make_action(self,
+                    parameter: int) -> congestion_control_pb2.Action:
+        self._send_state(parameter)
+        action = self._get_action()
+        print("Received Action: ", action)
+        return congestion_control_pb2.Action(cwnd_update=action)
+
+    # Main async coroutine for Bidirectional CongestionControl communication
+    # with JMockets
     async def OptimizeCongestionControl(self,
                                         request_iterator: AsyncIterable[
                                             congestion_control_pb2.TransmissionStatus],
@@ -107,13 +111,14 @@ class CongestionControlService(
 
             if self._message_n == 3:
                 self._message_n = 0
-                await asyncio.get_event_loop().run_in_executor(None, put_state,
-                                                               self._state_queue,
-                                                               status.parameter_1)
-                prediction = await asyncio.get_event_loop().run_in_executor(None,
-                                                                            get_prediction,
-                                                                            self._action_queue)
-                yield make_action(prediction)
+
+                # Run the I/O blocking Queue communication with Marlin
+                # Environment in a different thread and wait for response
+                action = await asyncio.get_event_loop(). \
+                    run_in_executor(None,
+                                    self.make_action,
+                                    status.parameter_1)
+                yield action
 
 
 async def serve(action_queue: Queue, state_queue: Queue) -> None:
@@ -130,8 +135,9 @@ async def serve(action_queue: Queue, state_queue: Queue) -> None:
 
 def run(action_queue: Queue,
         state_queue: Queue) -> None:
-    logging.basicConfig()
+    logging.basicConfig(level=logging.DEBUG)
     loop = asyncio.new_event_loop()
+    loop.set_debug(True)
     asyncio.set_event_loop(loop)
     loop.run_until_complete(
         serve(action_queue, state_queue))
