@@ -1,0 +1,4 @@
+[submodule "third-party/jmockets"]
+	path = third-party/jmockets
+	url = ssh://git@gitn.ihmc.us:22000/nomads/jmockets.git
+	branch = grpc2
