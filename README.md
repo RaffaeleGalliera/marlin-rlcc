@@ -1,0 +1,21 @@
+# [WIP] Marlin - Mockets Augmented with a Reinforcement Learning Agent
+
+## Setup
+
+1. Run `git submodule update --init --recursive` after cloning for pulling
+   JMockets submodule and its dependencies
+2. Create a Python Virtual Environment and
+   run `pip install -r requirements. txt` to install Python dependencies
+3. Run `python train.py` to begin the training phase and start the Data
+   Processing server (localhost:50051)
+4. Follow JMockets documentation and start the application
+
+## Troubleshooting
+- JMockets is dependent on:  _jmockets-proxy, jmockets-test-harness, 
+  nomads/jutil, nomads/measure_. If you have issues cloning JMockets submodules 
+  recursively:
+  - Check you have access to JMockets and the aforementioned 
+    dependencies repositories.
+  - If you do have access, but for some reason cannot HTTP login to NOMADS 
+    GitLab while your SSH-key access is enabled, you can use:
+    `git config --global url."ssh://git@gitn.ihmc.us:22000".insteadOf "https://gitn.ihmc.us"`
