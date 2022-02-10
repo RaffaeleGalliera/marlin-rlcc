@@ -102,7 +102,7 @@ class CongestionControlService(
                      parameters: np.array) -> congestion_control_pb2.Action:
         self._send_state(parameters)
         action = self._get_action()
-        print("Received Action: ", action)
+        print("SERVER - Received Action: ", action)
         return congestion_control_pb2.Action(cwnd_update=action)
 
     # Main async coroutine for Bidirectional CongestionControl communication
@@ -150,7 +150,7 @@ async def serve(action_queue: Queue, state_queue: Queue) -> None:
         server
     )
     server.add_insecure_port('[::]:50051')
-    print('Listening...')
+    print('SERVER - Listening...')
     await server.start()
     await server.wait_for_termination()
 
