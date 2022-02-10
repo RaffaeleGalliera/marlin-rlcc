@@ -105,9 +105,9 @@ class CongestionControlService(
         congestion_control_pb2.Action]:
         async for status in request_iterator:
             compute_statistics(
-                status.comulative_received_bytes,
-                status.comulative_sent_bytes,
-                status.comulative_sent_good_bytes,
+                status.cumulative_received_bytes,
+                status.cumulative_sent_bytes,
+                status.cumulative_sent_good_bytes,
                 status.current_window_size,
                 status.last_receive_timestamp,
                 status.traffic_in_flight
