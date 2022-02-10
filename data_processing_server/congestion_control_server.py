@@ -62,12 +62,14 @@ def background_awaitable(
 
 
 # Just a placeholder for the time being
-def compute_statistics(parameter_1: int,
-                       parameter_2: int,
-                       parameter_3: int) -> None:
+def compute_statistics(comulative_received_bytes: int,
+                       comulative_sent_bytes: int,
+                       comulative_sent_good_bytes: int,
+                       current_window_size: int,
+                       last_receive_timestamp: int,
+                       traffic_in_flight: int) -> None:
     print(
-        f"Received param_1 {parameter_1} param_2 {parameter_2} param_3"
-        f" {parameter_3}")
+        f"Received param_1 {traffic_in_flight}")
 
 
 class CongestionControlService(
@@ -103,9 +105,12 @@ class CongestionControlService(
         congestion_control_pb2.Action]:
         async for status in request_iterator:
             compute_statistics(
-                status.parameter_1,
-                status.parameter_2,
-                status.parameter_3
+                status.comulative_received_bytes,
+                status.comulative_sent_bytes,
+                status.comulative_sent_good_bytes,
+                status.current_window_size,
+                status.last_receive_timestamp,
+                status.traffic_in_flight
             )
             self._message_n += 1
 
@@ -117,7 +122,7 @@ class CongestionControlService(
                 action = await asyncio.get_event_loop(). \
                     run_in_executor(None,
                                     self._make_action,
-                                    status.parameter_1)
+                                    status.traffic_in_flight)
                 yield action
 
 

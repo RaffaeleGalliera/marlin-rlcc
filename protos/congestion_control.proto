@@ -15,13 +15,16 @@ service CongestionControl {
     rpc OptimizeCongestionControl(stream TransmissionStatus) returns (stream Action) {}
 }
 
-// TransmissionStatuses are represented by a list of parameters that are
+// TransmissionStatuses are represented by a list of parameters that are 
 // going to be decided in further iterations the following is just a
 // placeholder
 message TransmissionStatus {
-    int32 parameter_1 = 1;
-    int32 parameter_2 = 2;
-    int32 parameter_3 = 3;
+    int64 cumulative_received_bytes = 1;
+    int64 cumulative_sent_bytes = 2;
+    int64 cumulative_sent_good_bytes = 3;
+    int64 current_window_size = 4;
+    int64 last_receive_timestamp = 5;
+    int64 traffic_in_flight = 6;
 }
 
 // Actions represent the CongestionWindow update to be performed
@@ -29,3 +32,4 @@ message TransmissionStatus {
 message Action {
     int32 cwnd_update = 1;
 }
+
