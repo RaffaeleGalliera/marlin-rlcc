@@ -13,7 +13,7 @@ class CongestionControlEnv(Env):
                  episode_lenght: int = 1000,
                  eps: float = 0.05,
                  num_actions: int = 4,
-                 observation_length: int = 2):
+                 observation_length: int = 6):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -54,16 +54,16 @@ class CongestionControlEnv(Env):
         self._server_process.daemon = True
         self._server_process.start()
 
-    def _get_state(self):
+    def _get_state(self) -> np.array:
         self.state = self._state_queue.get()
-        print("Received State: ", self.state)
+        print("ENV - Received State: ", self.state)
         return self.state
 
     def _next_observation(self) -> np.array:
-        return np.array([self._get_state(), 0])
+        return self._get_state()
 
     def _put_action(self, action):
-        print("Performing Action: ", action)
+        print("ENV - Performing Action: ", action)
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
@@ -75,7 +75,7 @@ class CongestionControlEnv(Env):
         return self._next_observation()
 
     def step(self, action: np.ndarray) -> GymStepReturn:
-        self._put_action(self.state)
+        self._put_action(action)
         self.current_step += 1
         reward = self._get_reward()
         done = self.current_step >= self.episode_lenght

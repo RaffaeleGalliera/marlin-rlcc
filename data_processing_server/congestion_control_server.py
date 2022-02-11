@@ -10,6 +10,7 @@ from typing import AsyncIterable, Optional, Union
 from functools import wraps, partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
+import numpy as np
 import time
 import grpc
 from protos import congestion_control_pb2, congestion_control_pb2_grpc
@@ -62,12 +63,22 @@ def background_awaitable(
 
 
 # Just a placeholder for the time being
-def compute_statistics(parameter_1: int,
-                       parameter_2: int,
-                       parameter_3: int) -> None:
-    print(
-        f"Received param_1 {parameter_1} param_2 {parameter_2} param_3"
-        f" {parameter_3}")
+def compute_statistics(cumulative_received_bytes: int,
+                       cumulative_sent_bytes: int,
+                       cumulative_sent_good_bytes: int,
+                       current_window_size: int,
+                       last_receive_timestamp: int,
+                       traffic_in_flight: int) -> None:
+    print(f"SERVER RECEIVED - Cumulative Receive bytes:"
+          f" {cumulative_received_bytes}")
+    print(f"SERVER RECEIVED - Cumulative Sent bytes:"
+          f" {cumulative_sent_bytes}")
+    print(f"SERVER RECEIVED - Cumulative Sent good bytes:"
+          f" {cumulative_sent_good_bytes}")
+    print(f"SERVER RECEIVED - Current Window Size: {current_window_size}")
+    print(f"SERVER RECEIVED - Last Received Timestamp:"
+          f" {last_receive_timestamp}")
+    print(f"SERVER RECEIVED - Traffic in flight: {traffic_in_flight}")
 
 
 class CongestionControlService(
@@ -88,10 +99,10 @@ class CongestionControlService(
     # Sends an action reading and writing on the two pipes shared with the
     # main process
     def _make_action(self,
-                     parameter: int) -> congestion_control_pb2.Action:
-        self._send_state(parameter)
+                     parameters: np.array) -> congestion_control_pb2.Action:
+        self._send_state(parameters)
         action = self._get_action()
-        print("Received Action: ", action)
+        print("SERVER - Received Action: ", action)
         return congestion_control_pb2.Action(cwnd_update=action)
 
     # Main async coroutine for Bidirectional CongestionControl communication
@@ -103,10 +114,21 @@ class CongestionControlService(
         congestion_control_pb2.Action]:
         async for status in request_iterator:
             compute_statistics(
-                status.parameter_1,
-                status.parameter_2,
-                status.parameter_3
+                status.cumulative_received_bytes,
+                status.cumulative_sent_bytes,
+                status.cumulative_sent_good_bytes,
+                status.current_window_size,
+                status.last_receive_timestamp,
+                status.traffic_in_flight
             )
+            parameters = np.array([
+                status.cumulative_received_bytes,
+                status.cumulative_sent_bytes,
+                status.cumulative_sent_good_bytes,
+                status.current_window_size,
+                status.last_receive_timestamp,
+                status.traffic_in_flight
+            ])
             self._message_n += 1
 
             if self._message_n == 3:
@@ -117,7 +139,7 @@ class CongestionControlService(
                 action = await asyncio.get_event_loop(). \
                     run_in_executor(None,
                                     self._make_action,
-                                    status.parameter_1)
+                                    parameters)
                 yield action
 
 
@@ -128,7 +150,7 @@ async def serve(action_queue: Queue, state_queue: Queue) -> None:
         server
     )
     server.add_insecure_port('[::]:50051')
-    print('Listening...')
+    print('SERVER - Listening...')
     await server.start()
     await server.wait_for_termination()
 
