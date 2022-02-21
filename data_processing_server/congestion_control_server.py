@@ -15,6 +15,7 @@ import time
 import grpc
 from protos import congestion_control_pb2, congestion_control_pb2_grpc
 from multiprocessing import Queue
+import mockets_parameters_operations as mpo
 
 
 def background_awaitable(
@@ -62,25 +63,6 @@ def background_awaitable(
     return wrapper
 
 
-# Just a placeholder for the time being
-def compute_statistics(cumulative_received_bytes: int,
-                       cumulative_sent_bytes: int,
-                       cumulative_sent_good_bytes: int,
-                       current_window_size: int,
-                       last_receive_timestamp: int,
-                       traffic_in_flight: int) -> None:
-    print(f"SERVER RECEIVED - Cumulative Receive bytes:"
-          f" {cumulative_received_bytes}")
-    print(f"SERVER RECEIVED - Cumulative Sent bytes:"
-          f" {cumulative_sent_bytes}")
-    print(f"SERVER RECEIVED - Cumulative Sent good bytes:"
-          f" {cumulative_sent_good_bytes}")
-    print(f"SERVER RECEIVED - Current Window Size: {current_window_size}")
-    print(f"SERVER RECEIVED - Last Received Timestamp:"
-          f" {last_receive_timestamp}")
-    print(f"SERVER RECEIVED - Traffic in flight: {traffic_in_flight}")
-
-
 class CongestionControlService(
     congestion_control_pb2_grpc.CongestionControlServicer):
     """Implements methods for Communication during the Congestion Control"""
@@ -94,7 +76,7 @@ class CongestionControlService(
         self._state_queue.put(parameter)
 
     def _get_action(self):
-        return self._action_queue.get()
+        return mpo.update_cwnd(self._action_queue.get())
 
     # Sends an action reading and writing on the two pipes shared with the
     # main process
@@ -113,7 +95,7 @@ class CongestionControlService(
                                         unused_context) -> AsyncIterable[
         congestion_control_pb2.Action]:
         async for status in request_iterator:
-            compute_statistics(
+            mpo.compute_statistics(
                 status.cumulative_received_bytes,
                 status.cumulative_sent_bytes,
                 status.cumulative_sent_good_bytes,
