@@ -53,6 +53,11 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     ])
 
 
+def smoothed_rtt(current_srtt: float, rtt: int, alpha: float):
+    return rtt if current_srtt is None else (1 - alpha) * current_srtt + \
+                                            alpha * rtt
+
+
 # Just a placeholder for the time being
 def compute_statistics(cumulative_received_bytes: int,
                        cumulative_sent_bytes: int,
@@ -72,9 +77,11 @@ def compute_statistics(cumulative_received_bytes: int,
                   f" {last_receive_timestamp}")
     logging.debug(f"SERVER RECEIVED - Traffic in flight: {traffic_in_flight}")
 
+    current_statistics["srtt"] = smoothed_rtt(current_statistics["srtt"],
+                                              current_statistics["rtt"],
+                                              constants.ALPHA)
+
 
 # Mockets Congestion Window % action
 def update_cwnd(index):
     return constants.ACTIONS[index]
-
-
