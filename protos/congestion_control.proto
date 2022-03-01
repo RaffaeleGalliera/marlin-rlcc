@@ -23,8 +23,11 @@ message TransmissionStatus {
     int64 cumulative_sent_bytes = 2;
     int64 cumulative_sent_good_bytes = 3;
     int64 current_window_size = 4;
-    int64 last_receive_timestamp = 5;
-    int64 traffic_in_flight = 6;
+    int64 last_receive_time = 5;
+    int64 unack_bytes = 6;
+    int64 retransmissions = 7;
+    int64 chunk_rtt = 8;
+    int64 min_acknowledge_time = 9;
 }
 
 // Actions represent the CongestionWindow update to be performed
