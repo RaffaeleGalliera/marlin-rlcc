@@ -13,7 +13,7 @@ class CongestionControlEnv(Env):
                  episode_lenght: int = 1000,
                  eps: float = 0.05,
                  num_actions: int = 4,
-                 observation_length: int = 6):
+                 observation_length: int = 9):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
