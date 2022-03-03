@@ -59,23 +59,29 @@ def smoothed_rtt(current_srtt: float, rtt: int, alpha: float):
 
 
 # Just a placeholder for the time being
+# Just a placeholder for the time being
 def compute_statistics(cumulative_received_bytes: int,
                        cumulative_sent_bytes: int,
                        cumulative_sent_good_bytes: int,
                        current_window_size: int,
                        last_receive_timestamp: int,
-                       traffic_in_flight: int) -> None:
+                       unack_bytes: int,
+                       retransmissions: int,
+                       chunk_rtt: int,
+                       min_acknowledge_time: int) -> None:
     logging.debug(f"SERVER RECEIVED - Cumulative Receive bytes:"
-                  f" {cumulative_received_bytes}")
+          f" {cumulative_received_bytes}")
     logging.debug(f"SERVER RECEIVED - Cumulative Sent bytes:"
-                  f" {cumulative_sent_bytes}")
+          f" {cumulative_sent_bytes}")
     logging.debug(f"SERVER RECEIVED - Cumulative Sent good bytes:"
-                  f" {cumulative_sent_good_bytes}")
-    logging.debug(
-        f"SERVER RECEIVED - Current Window Size: {current_window_size}")
-    logging.debug(f"SERVER RECEIVED - Last Received Timestamp:"
-                  f" {last_receive_timestamp}")
-    logging.debug(f"SERVER RECEIVED - Traffic in flight: {traffic_in_flight}")
+          f" {cumulative_sent_good_bytes}")
+    logging.debug(f"SERVER RECEIVED - Current Window Size: {current_window_size}")
+    logging.debug(f"SERVER RECEIVED - Last Received Timestamp (Micro):"
+          f" {last_receive_timestamp}")
+    logging.debug(f"SERVER RECEIVED - Unack Bytes: {unack_bytes}")
+    logging.debug(f"SERVER RECEIVED - Retransmissions: {retransmissions}")
+    logging.debug(f"SERVER RECEIVED - Chunk RTT (Micro): {chunk_rtt}")
+    logging.debug(f"SERVER RECEIVED - Min Ack Time (Micro): {min_acknowledge_time}")
 
     current_statistics["srtt"] = smoothed_rtt(current_statistics["srtt"],
                                               current_statistics["rtt"],

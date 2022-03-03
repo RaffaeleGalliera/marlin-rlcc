@@ -100,16 +100,22 @@ class CongestionControlService(
                 status.cumulative_sent_bytes,
                 status.cumulative_sent_good_bytes,
                 status.current_window_size,
-                status.last_receive_timestamp,
-                status.traffic_in_flight
+                status.last_receive_time,
+                status.unack_bytes,
+                status.retransmissions,
+                status.chunk_rtt,
+                status.min_acknowledge_time
             )
             parameters = np.array([
                 status.cumulative_received_bytes,
                 status.cumulative_sent_bytes,
                 status.cumulative_sent_good_bytes,
                 status.current_window_size,
-                status.last_receive_timestamp,
-                status.traffic_in_flight
+                status.last_receive_time,
+                status.unack_bytes,
+                status.retransmissions,
+                status.chunk_rtt,
+                status.min_acknowledge_time
             ])
             self._message_n += 1
 
