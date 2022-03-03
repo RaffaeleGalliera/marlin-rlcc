@@ -16,13 +16,13 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     'rtt_min',
                                     # Minimum RTT since beginning ep.
                                     'srtt',  # Smoothed RTT
-                                    'rtt_standing',  # Min RTT over win size
-                                    # srtt/2
+                                    'rtt_standing',  # Min RTT over win of size
+                                    # srtt/2 ??
                                     'rtt_var',  # Variance in RTT
                                     'delay',  # Queuing delay measured in
                                     # rtt_standing - rtt_min
                                     'cwnd_bytes',  # Congestion window in
-                                    # bytes calculated as cwnd * MSS
+                                    # bytes calculated as cwnd * MSS ??
                                     'inflight_bytes',  # Number of bytes sent
                                     # but unacked
                                     'writable_bytes',  # Number of writable
@@ -58,7 +58,10 @@ def smoothed_rtt(current_srtt: float, rtt: int, alpha: float):
                                             alpha * rtt
 
 
-# Just a placeholder for the time being
+def writable_bytes(cwnd: int, inflight_bytes: int) -> int:
+    return cwnd - inflight_bytes
+
+
 # Just a placeholder for the time being
 def compute_statistics(cumulative_received_bytes: int,
                        cumulative_sent_bytes: int,
@@ -70,24 +73,37 @@ def compute_statistics(cumulative_received_bytes: int,
                        chunk_rtt: int,
                        min_acknowledge_time: int) -> None:
     logging.debug(f"SERVER RECEIVED - Cumulative Receive bytes:"
-          f" {cumulative_received_bytes}")
+                  f" {cumulative_received_bytes}")
     logging.debug(f"SERVER RECEIVED - Cumulative Sent bytes:"
-          f" {cumulative_sent_bytes}")
+                  f" {cumulative_sent_bytes}")
     logging.debug(f"SERVER RECEIVED - Cumulative Sent good bytes:"
-          f" {cumulative_sent_good_bytes}")
-    logging.debug(f"SERVER RECEIVED - Current Window Size: {current_window_size}")
+                  f" {cumulative_sent_good_bytes}")
+    logging.debug(
+        f"SERVER RECEIVED - Current Window Size: {current_window_size}")
     logging.debug(f"SERVER RECEIVED - Last Received Timestamp (Micro):"
-          f" {last_receive_timestamp}")
+                  f" {last_receive_timestamp}")
     logging.debug(f"SERVER RECEIVED - Unack Bytes: {unack_bytes}")
     logging.debug(f"SERVER RECEIVED - Retransmissions: {retransmissions}")
     logging.debug(f"SERVER RECEIVED - Chunk RTT (Micro): {chunk_rtt}")
-    logging.debug(f"SERVER RECEIVED - Min Ack Time (Micro): {min_acknowledge_time}")
+    logging.debug(
+        f"SERVER RECEIVED - Min Ack Time (Micro): {min_acknowledge_time}")
 
-    current_statistics["srtt"] = smoothed_rtt(current_statistics["srtt"],
-                                              current_statistics["rtt"],
+    # Based
+    current_statistics['lrtt'] = chunk_rtt
+    current_statistics['cwnd_bytes'] = current_window_size
+    current_statistics['inflight_bytes'] = unack_bytes
+
+    # Further computation
+    current_statistics['rtt_min'] = min(current_statistics['lrtt'],
+                                        current_statistics['rtt_min'])
+    current_statistics['srtt'] = smoothed_rtt(current_statistics['srtt'],
+                                              current_statistics['rtt'],
                                               constants.ALPHA)
-
+    current_statistics['writable_bytes'] = writable_bytes(current_statistics[
+                                                              'cwnd_bytes'],
+                                                          current_statistics[
+                                                              'inflight_bytes'])
 
 # Mockets Congestion Window % action
 def update_cwnd(index):
-    return constants.ACTIONS[index]
+    return current_statistics['cwnd_bytes'] * constants.ACTIONS[index]
