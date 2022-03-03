@@ -16,9 +16,6 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     'rtt_min',
                                     # Minimum RTT since beginning ep.
                                     'srtt',  # Smoothed RTT
-                                    'rtt_standing',  # Min RTT over win of size
-                                    # srtt/2 ??
-                                    'rtt_var',  # Variance in RTT
                                     'delay',  # Queuing delay measured in
                                     # rtt_standing - rtt_min
                                     'cwnd_bytes',  # Congestion window in
@@ -31,23 +28,31 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     # since last ACK
                                     'received_bytes',  # Number of byte
                                     # received since last ACK
-                                    'rtx_bytes',  # Number of bytes
-                                    # retransmitted since last ACK
                                     'acked_bytes',  # Number of bytes acked
                                     # in this ACK
-                                    'lost_bytes',  # Number of bytes lost in
-                                    # this loss
                                     'throughput',  # Instant throughput
                                     # estimated from recent ACKs
-                                    'rtx_count',  # Number of pakcets
+                                    'last_timestamp',
+                                    # TODO: 'rtt_standing',  # Min RTT over
+                                    # win of size
+                                    # srtt/2 ??
+                                    # TODO: 'rtt_var',  # Variance in RTT
+                                    # TODO: 'rtx_bytes',  # Number of bytes
                                     # retransmitted since last ACK
-                                    'timeout_based_rtx_count',  # Number of
+                                    # TODO: 'lost_bytes',  # Number of bytes
+                                    # lost in
+                                    # this loss
+                                    # TODO:'rtx_count',  # Number of pakcets
+                                    # retransmitted since last ACK
+                                    # TODO: 'timeout_based_rtx_count',
+                                    # Number of
                                     # Retransmissions due to PTO since last ACK
-                                    'pto_count',  # Number of times packet
+                                    # TODO: 'pto_count',  # Number of times
+                                    # packet
                                     # loss timer fired before receiving an ACK
-                                    'total_pto_count',  # Number of times
+                                    # TODO: 'total_pto_count',  # Number of times
                                     # packet loss timer fired since last ACK
-                                    'persistent_congestion'  # Flag
+                                    # TODO: 'persistent_congestion'  # Flag
                                     # indicating whether persistent congestion
                                     # is detected
                                     ])
@@ -60,6 +65,11 @@ def smoothed_rtt(current_srtt: float, rtt: int, alpha: float):
 
 def writable_bytes(cwnd: int, inflight_bytes: int) -> int:
     return cwnd - inflight_bytes
+
+
+def throughput(sent_bytes_t2: int, sent_bytes_t1: int, timestamp_t2: int,
+               timestamp_t1: int, ) -> float:
+    return (sent_bytes_t2 - sent_bytes_t1) / (timestamp_t2 - timestamp_t1)
 
 
 # Just a placeholder for the time being
@@ -103,6 +113,17 @@ def compute_statistics(cumulative_received_bytes: int,
                                                               'cwnd_bytes'],
                                                           current_statistics[
                                                               'inflight_bytes'])
+    current_statistics['throughput'] = throughput(cumulative_sent_bytes,
+                                                  current_statistics[
+                                                      'sent_bytes'],
+                                                  last_receive_timestamp,
+                                                  current_statistics[
+                                                      'last_receive_timestamp'])
+
+    # Temporary
+    current_statistics['sent_bytes'] = cumulative_sent_bytes
+    current_statistics['received_bytes'] = cumulative_received_bytes
+
 
 # Mockets Congestion Window % action
 def update_cwnd(index):

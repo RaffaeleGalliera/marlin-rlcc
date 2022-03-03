@@ -15,7 +15,9 @@ import time
 import grpc
 from protos import congestion_control_pb2, congestion_control_pb2_grpc
 from multiprocessing import Queue
+
 import mockets_parameters_operations as mpo
+import constants
 
 
 def background_awaitable(
@@ -78,11 +80,13 @@ class CongestionControlService(
     def _get_action(self):
         return mpo.update_cwnd(self._action_queue.get())
 
+    def _get_state(self):
+        return np.array([mpo.current_statistics[x] for x in constants.STATE])
+
     # Sends an action reading and writing on the two pipes shared with the
     # main process
-    def _make_action(self,
-                     parameters: np.array) -> congestion_control_pb2.Action:
-        self._send_state(parameters)
+    def _make_action(self) -> congestion_control_pb2.Action:
+        self._send_state(self._get_state())
         action = self._get_action()
         print("SERVER - Received Action: ", action)
         return congestion_control_pb2.Action(cwnd_update=action)
@@ -106,17 +110,7 @@ class CongestionControlService(
                 status.chunk_rtt,
                 status.min_acknowledge_time
             )
-            parameters = np.array([
-                status.cumulative_received_bytes,
-                status.cumulative_sent_bytes,
-                status.cumulative_sent_good_bytes,
-                status.current_window_size,
-                status.last_receive_time,
-                status.unack_bytes,
-                status.retransmissions,
-                status.chunk_rtt,
-                status.min_acknowledge_time
-            ])
+
             self._message_n += 1
 
             if self._message_n == 3:
@@ -126,8 +120,7 @@ class CongestionControlService(
                 # Environment in a different thread and wait for response
                 action = await asyncio.get_event_loop(). \
                     run_in_executor(None,
-                                    self._make_action,
-                                    parameters)
+                                    self._make_action)
                 yield action
 
 
