@@ -68,7 +68,10 @@ def compute_statistics(cumulative_received_bytes: int,
                        cumulative_sent_good_bytes: int,
                        current_window_size: int,
                        last_receive_timestamp: int,
-                       traffic_in_flight: int) -> None:
+                       unack_bytes: int,
+                       retransmissions: int,
+                       chunk_rtt: int,
+                       min_acknowledge_time: int) -> None:
     print(f"SERVER RECEIVED - Cumulative Receive bytes:"
           f" {cumulative_received_bytes}")
     print(f"SERVER RECEIVED - Cumulative Sent bytes:"
@@ -76,9 +79,12 @@ def compute_statistics(cumulative_received_bytes: int,
     print(f"SERVER RECEIVED - Cumulative Sent good bytes:"
           f" {cumulative_sent_good_bytes}")
     print(f"SERVER RECEIVED - Current Window Size: {current_window_size}")
-    print(f"SERVER RECEIVED - Last Received Timestamp:"
+    print(f"SERVER RECEIVED - Last Received Timestamp (Micro):"
           f" {last_receive_timestamp}")
-    print(f"SERVER RECEIVED - Traffic in flight: {traffic_in_flight}")
+    print(f"SERVER RECEIVED - Unack Bytes: {unack_bytes}")
+    print(f"SERVER RECEIVED - Retransmissions: {retransmissions}")
+    print(f"SERVER RECEIVED - Chunk RTT (Micro): {chunk_rtt}")
+    print(f"SERVER RECEIVED - Min Ack Time (Micro): {min_acknowledge_time}")
 
 
 class CongestionControlService(
@@ -118,16 +124,22 @@ class CongestionControlService(
                 status.cumulative_sent_bytes,
                 status.cumulative_sent_good_bytes,
                 status.current_window_size,
-                status.last_receive_timestamp,
-                status.traffic_in_flight
+                status.last_receive_time,
+                status.unack_bytes,
+                status.retransmissions,
+                status.chunk_rtt,
+                status.min_acknowledge_time
             )
             parameters = np.array([
                 status.cumulative_received_bytes,
                 status.cumulative_sent_bytes,
                 status.cumulative_sent_good_bytes,
                 status.current_window_size,
-                status.last_receive_timestamp,
-                status.traffic_in_flight
+                status.last_receive_time,
+                status.unack_bytes,
+                status.retransmissions,
+                status.chunk_rtt,
+                status.min_acknowledge_time
             ])
             self._message_n += 1
 
