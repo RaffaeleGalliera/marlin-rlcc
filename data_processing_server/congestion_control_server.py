@@ -72,21 +72,18 @@ class CongestionControlService(
     def __init__(self, action_queue, state_queue):
         self._action_queue = action_queue
         self._state_queue = state_queue
-        self._message_n = 0
 
-    def _send_state(self, parameter):
+    def _send_state(self, parameter: np.array):
         self._state_queue.put(parameter)
 
     def _get_action(self):
-        return mpo.update_cwnd(self._action_queue.get())
-
-    def _get_state(self):
-        return np.array([mpo.current_statistics[x] for x in constants.STATE])
+        return self._action_queue.get()
 
     # Sends an action reading and writing on the two pipes shared with the
     # main process
-    def _make_action(self) -> congestion_control_pb2.Action:
-        self._send_state(self._get_state())
+    def _make_action(self, parameters: np.array) -> \
+            congestion_control_pb2.Action:
+        self._send_state(parameters)
         action = self._get_action()
         print("SERVER - Received Action: ", action)
         return congestion_control_pb2.Action(cwnd_update=action)
@@ -99,7 +96,7 @@ class CongestionControlService(
                                         unused_context) -> AsyncIterable[
         congestion_control_pb2.Action]:
         async for status in request_iterator:
-            mpo.compute_statistics(
+            parameters = np.array([
                 status.cumulative_received_bytes,
                 status.cumulative_sent_bytes,
                 status.cumulative_sent_good_bytes,
@@ -109,19 +106,15 @@ class CongestionControlService(
                 status.retransmissions,
                 status.chunk_rtt,
                 status.min_acknowledge_time
-            )
+            ])
 
-            self._message_n += 1
 
-            if self._message_n == 3:
-                self._message_n = 0
 
-                # Run the I/O blocking Queue communication with Marlin
-                # Environment in a different thread and wait for response
-                action = await asyncio.get_event_loop(). \
-                    run_in_executor(None,
-                                    self._make_action)
-                yield action
+            # Run the I/O blocking Queue communication with Marlin
+            # Environment in a different thread and wait for response
+            action = await asyncio.get_event_loop(). \
+                run_in_executor(None, self._make_action, parameters)
+            yield action
 
 
 async def serve(action_queue: Queue, state_queue: Queue) -> None:

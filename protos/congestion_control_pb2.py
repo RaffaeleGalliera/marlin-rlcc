@@ -3,6 +3,7 @@
 # source: protos/congestion_control.proto
 """Generated protocol buffer code."""
 from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import message as _message
 from google.protobuf import reflection as _reflection
 from google.protobuf import symbol_database as _symbol_database
@@ -13,141 +14,12 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor.FileDescriptor(
-  name='protos/congestion_control.proto',
-  package='congestioncontrol',
-  syntax='proto3',
-  serialized_options=b'B\026CongestionControlProtoP\001',
-  create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x1fprotos/congestion_control.proto\x12\x11\x63ongestioncontrol\"\x91\x02\n\x12TransmissionStatus\x12!\n\x19\x63umulative_received_bytes\x18\x01 \x01(\x03\x12\x1d\n\x15\x63umulative_sent_bytes\x18\x02 \x01(\x03\x12\"\n\x1a\x63umulative_sent_good_bytes\x18\x03 \x01(\x03\x12\x1b\n\x13\x63urrent_window_size\x18\x04 \x01(\x03\x12\x19\n\x11last_receive_time\x18\x05 \x01(\x03\x12\x13\n\x0bunack_bytes\x18\x06 \x01(\x03\x12\x17\n\x0fretransmissions\x18\x07 \x01(\x03\x12\x11\n\tchunk_rtt\x18\x08 \x01(\x03\x12\x1c\n\x14min_acknowledge_time\x18\t \x01(\x03\"\x1d\n\x06\x41\x63tion\x12\x13\n\x0b\x63wnd_update\x18\x01 \x01(\x05\x32x\n\x11\x43ongestionControl\x12\x63\n\x19OptimizeCongestionControl\x12%.congestioncontrol.TransmissionStatus\x1a\x19.congestioncontrol.Action\"\x00(\x01\x30\x01\x42\x1a\x42\x16\x43ongestionControlProtoP\x01\x62\x06proto3'
-)
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fprotos/congestion_control.proto\x12\x11\x63ongestioncontrol\"\x91\x02\n\x12TransmissionStatus\x12!\n\x19\x63umulative_received_bytes\x18\x01 \x01(\x03\x12\x1d\n\x15\x63umulative_sent_bytes\x18\x02 \x01(\x03\x12\"\n\x1a\x63umulative_sent_good_bytes\x18\x03 \x01(\x03\x12\x1b\n\x13\x63urrent_window_size\x18\x04 \x01(\x03\x12\x19\n\x11last_receive_time\x18\x05 \x01(\x03\x12\x13\n\x0bunack_bytes\x18\x06 \x01(\x03\x12\x17\n\x0fretransmissions\x18\x07 \x01(\x03\x12\x11\n\tchunk_rtt\x18\x08 \x01(\x03\x12\x1c\n\x14min_acknowledge_time\x18\t \x01(\x03\"\x1d\n\x06\x41\x63tion\x12\x13\n\x0b\x63wnd_update\x18\x01 \x01(\x03\x32x\n\x11\x43ongestionControl\x12\x63\n\x19OptimizeCongestionControl\x12%.congestioncontrol.TransmissionStatus\x1a\x19.congestioncontrol.Action\"\x00(\x01\x30\x01\x42\x1a\x42\x16\x43ongestionControlProtoP\x01\x62\x06proto3')
 
 
 
-
-_TRANSMISSIONSTATUS = _descriptor.Descriptor(
-  name='TransmissionStatus',
-  full_name='congestioncontrol.TransmissionStatus',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='cumulative_received_bytes', full_name='congestioncontrol.TransmissionStatus.cumulative_received_bytes', index=0,
-      number=1, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='cumulative_sent_bytes', full_name='congestioncontrol.TransmissionStatus.cumulative_sent_bytes', index=1,
-      number=2, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='cumulative_sent_good_bytes', full_name='congestioncontrol.TransmissionStatus.cumulative_sent_good_bytes', index=2,
-      number=3, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='current_window_size', full_name='congestioncontrol.TransmissionStatus.current_window_size', index=3,
-      number=4, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='last_receive_time', full_name='congestioncontrol.TransmissionStatus.last_receive_time', index=4,
-      number=5, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='unack_bytes', full_name='congestioncontrol.TransmissionStatus.unack_bytes', index=5,
-      number=6, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='retransmissions', full_name='congestioncontrol.TransmissionStatus.retransmissions', index=6,
-      number=7, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='chunk_rtt', full_name='congestioncontrol.TransmissionStatus.chunk_rtt', index=7,
-      number=8, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='min_acknowledge_time', full_name='congestioncontrol.TransmissionStatus.min_acknowledge_time', index=8,
-      number=9, type=3, cpp_type=2, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=55,
-  serialized_end=328,
-)
-
-
-_ACTION = _descriptor.Descriptor(
-  name='Action',
-  full_name='congestioncontrol.Action',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='cwnd_update', full_name='congestioncontrol.Action.cwnd_update', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=330,
-  serialized_end=359,
-)
-
-DESCRIPTOR.message_types_by_name['TransmissionStatus'] = _TRANSMISSIONSTATUS
-DESCRIPTOR.message_types_by_name['Action'] = _ACTION
-_sym_db.RegisterFileDescriptor(DESCRIPTOR)
-
+_TRANSMISSIONSTATUS = DESCRIPTOR.message_types_by_name['TransmissionStatus']
+_ACTION = DESCRIPTOR.message_types_by_name['Action']
 TransmissionStatus = _reflection.GeneratedProtocolMessageType('TransmissionStatus', (_message.Message,), {
   'DESCRIPTOR' : _TRANSMISSIONSTATUS,
   '__module__' : 'protos.congestion_control_pb2'
@@ -162,32 +34,15 @@ Action = _reflection.GeneratedProtocolMessageType('Action', (_message.Message,),
   })
 _sym_db.RegisterMessage(Action)
 
+_CONGESTIONCONTROL = DESCRIPTOR.services_by_name['CongestionControl']
+if _descriptor._USE_C_DESCRIPTORS == False:
 
-DESCRIPTOR._options = None
-
-_CONGESTIONCONTROL = _descriptor.ServiceDescriptor(
-  name='CongestionControl',
-  full_name='congestioncontrol.CongestionControl',
-  file=DESCRIPTOR,
-  index=0,
-  serialized_options=None,
-  create_key=_descriptor._internal_create_key,
-  serialized_start=361,
-  serialized_end=481,
-  methods=[
-  _descriptor.MethodDescriptor(
-    name='OptimizeCongestionControl',
-    full_name='congestioncontrol.CongestionControl.OptimizeCongestionControl',
-    index=0,
-    containing_service=None,
-    input_type=_TRANSMISSIONSTATUS,
-    output_type=_ACTION,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-])
-_sym_db.RegisterServiceDescriptor(_CONGESTIONCONTROL)
-
-DESCRIPTOR.services_by_name['CongestionControl'] = _CONGESTIONCONTROL
-
+  DESCRIPTOR._options = None
+  DESCRIPTOR._serialized_options = b'B\026CongestionControlProtoP\001'
+  _TRANSMISSIONSTATUS._serialized_start=55
+  _TRANSMISSIONSTATUS._serialized_end=328
+  _ACTION._serialized_start=330
+  _ACTION._serialized_end=359
+  _CONGESTIONCONTROL._serialized_start=361
+  _CONGESTIONCONTROL._serialized_end=481
 # @@protoc_insertion_point(module_scope)

@@ -1,18 +1,22 @@
 import time
 from multiprocessing import Queue, Process
 import numpy as np
+import logging
 from gym import Env
 from gym.spaces import Box, Discrete
 
 from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
+
 import data_processing_server.congestion_control_server as cc_server
+import mockets_parameters_operations as mpo
+import constants
 
 
 class CongestionControlEnv(Env):
     def __init__(self,
                  episode_lenght: int = 1000,
                  eps: float = 0.05,
-                 num_actions: int = 4,
+                 num_actions: int = 6,
                  observation_length: int = 9):
         """
         :param eps: the epsilon bound for correct value
@@ -55,8 +59,23 @@ class CongestionControlEnv(Env):
         self._server_process.start()
 
     def _get_state(self) -> np.array:
-        self.state = self._state_queue.get()
-        print("ENV - Received State: ", self.state)
+        parameters = self._state_queue.get()
+        mpo.compute_statistics(
+                parameters[0],
+                parameters[1],
+                parameters[2],
+                parameters[3],
+                parameters[4],
+                parameters[5],
+                parameters[6],
+                parameters[7],
+                parameters[8]
+            )
+
+        self.state = np.array(
+            [mpo.current_statistics[x] for x in constants.STATE])
+
+        logging.debug("ENV - State: ", self.state)
         return self.state
 
     def _next_observation(self) -> np.array:
@@ -67,7 +86,7 @@ class CongestionControlEnv(Env):
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
-        return 1.0
+        return mpo.current_statistics['throughput']
 
     def reset(self) -> GymObs:
         self.current_step = 0
@@ -75,7 +94,7 @@ class CongestionControlEnv(Env):
         return self._next_observation()
 
     def step(self, action: np.ndarray) -> GymStepReturn:
-        self._put_action(action)
+        self._put_action(mpo.cwnd_update(action))
         self.current_step += 1
         reward = self._get_reward()
         done = self.current_step >= self.episode_lenght

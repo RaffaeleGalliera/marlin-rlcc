@@ -33,6 +33,6 @@ message TransmissionStatus {
 // Actions represent the CongestionWindow update to be performed
 // the following is meant to be just a placeholder
 message Action {
-    int32 cwnd_update = 1;
+    int64 cwnd_update = 1;
 }
 
