@@ -11,6 +11,8 @@ import data_processing_server.congestion_control_server as cc_server
 import mockets_parameters_operations as mpo
 import constants
 
+logging.basicConfig(level=logging.DEBUG)
+
 
 class CongestionControlEnv(Env):
     def __init__(self,
@@ -75,14 +77,12 @@ class CongestionControlEnv(Env):
         self.state = np.array(
             [mpo.current_statistics[x] for x in constants.STATE])
 
-        logging.debug("ENV - State: ", self.state)
         return self.state
 
     def _next_observation(self) -> np.array:
         return self._get_state()
 
     def _put_action(self, action):
-        print("ENV - Performing Action: ", action)
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
