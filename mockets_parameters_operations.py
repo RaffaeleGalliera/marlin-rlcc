@@ -136,5 +136,6 @@ def compute_statistics(cumulative_received_bytes: int,
 
 # Mockets Congestion Window % action
 def cwnd_update(index):
+    logging.debug("AGENT - UPDATE WITH ACTIONS %s", constants.ACTIONS[index])
     return math.ceil(current_statistics['cwnd_bytes'] + current_statistics[
         'cwnd_bytes'] * constants.ACTIONS[index])
