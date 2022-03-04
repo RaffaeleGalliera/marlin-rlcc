@@ -11,6 +11,7 @@ Created: February 21st, 2022
 import logging
 import constants
 import math
+import statistics
 
 # Initialize current_statistics with None
 current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
@@ -73,6 +74,9 @@ def throughput(sent_bytes_t2: int, sent_bytes_t1: int, timestamp_t2: int,
     return (sent_bytes_t2 - sent_bytes_t1) / (timestamp_t2 - timestamp_t1)
 
 
+min_ack = []
+
+
 # Just a placeholder for the time being
 def compute_statistics(cumulative_received_bytes: int,
                        cumulative_sent_bytes: int,
@@ -99,8 +103,12 @@ def compute_statistics(cumulative_received_bytes: int,
     logging.debug(
         f"SERVER ENV - Min Ack Time (Micro): {min_acknowledge_time}")
 
+    min_ack.append(min_acknowledge_time)
+    logging.debug(
+        f"SERVER ENV - VARIANCE: {statistics.variance(min_ack)}")
+
     # Based
-    current_statistics['lrtt'] = chunk_rtt
+    current_statistics['lrtt'] = min_acknowledge_time
     current_statistics['cwnd_bytes'] = current_window_size
     current_statistics['inflight_bytes'] = unack_bytes
 
