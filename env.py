@@ -74,8 +74,7 @@ class CongestionControlEnv(Env):
                 parameters[8]
             )
 
-        self.state = np.array(
-            [mpo.current_statistics[x] for x in constants.STATE])
+        self.state = np.array([mpo.current_statistics[x] for x in constants.STATE])
 
         return self.state
 

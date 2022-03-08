@@ -14,6 +14,7 @@ import math
 import statistics
 
 # Initialize current_statistics with None
+min_ack = [0]
 current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     'rtt_min',
                                     # Minimum RTT since beginning ep.
@@ -27,9 +28,9 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     'writable_bytes',  # Number of writable
                                     # bytes cwnd_bytes - inflight_bytes
                                     'sent_bytes',  # Number of bytes sent
-                                    # since last ACK
+                                    # since last ACK (LAST RECEIVE??)
                                     'received_bytes',  # Number of byte
-                                    # received since last ACK
+                                    # received since last ACK (LAST RECEIVE??)
                                     'acked_bytes',  # Number of bytes acked
                                     # in this ACK
                                     'throughput',  # Instant throughput
@@ -57,24 +58,21 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     # TODO: 'persistent_congestion'  # Flag
                                     # indicating whether persistent congestion
                                     # is detected
-                                    ], 0)
+                                    ], 0.0)
 
 
-def smoothed_rtt(current_srtt: float, rtt: int, alpha: float):
+def smoothed_rtt(current_srtt: float, rtt: float, alpha: float):
     return rtt if current_srtt is None else (1 - alpha) * current_srtt + \
                                             alpha * rtt
 
 
-def writable_bytes(cwnd: int, inflight_bytes: int) -> int:
+def writable_bytes(cwnd: float, inflight_bytes: float) -> float:
     return cwnd - inflight_bytes
 
 
-def throughput(sent_bytes_t2: int, sent_bytes_t1: int, timestamp_t2: int,
-               timestamp_t1: int, ) -> float:
-    return (sent_bytes_t2 - sent_bytes_t1) / (timestamp_t2 - timestamp_t1)
-
-
-min_ack = []
+def throughput(sent_bytes: float, timestamp_t1: float, timestamp_t2: float,
+               ) -> float:
+    return sent_bytes / (timestamp_t2 - timestamp_t1)
 
 
 # Just a placeholder for the time being
@@ -87,25 +85,6 @@ def compute_statistics(cumulative_received_bytes: int,
                        retransmissions: int,
                        chunk_rtt: int,
                        min_acknowledge_time: int) -> None:
-    logging.debug(f"ENV RECEIVED - Cumulative Receive bytes:"
-                  f" {cumulative_received_bytes}")
-    logging.debug(f"ENV RECEIVED - Cumulative Sent bytes:"
-                  f" {cumulative_sent_bytes}")
-    logging.debug(f"ENV RECEIVED - Cumulative Sent good bytes:"
-                  f" {cumulative_sent_good_bytes}")
-    logging.debug(
-        f"ENV RECEIVED - Current Window Size: {current_window_size}")
-    logging.debug(f"ENV RECEIVED - Last Received Timestamp (Micro):"
-                  f" {last_receive_timestamp}")
-    logging.debug(f"ENV RECEIVED - Unack Bytes: {unack_bytes}")
-    logging.debug(f"ENV RECEIVED - Retransmissions: {retransmissions}")
-    logging.debug(f"ENV RECEIVED - Chunk RTT (Micro): {chunk_rtt}")
-    logging.debug(
-        f"SERVER ENV - Min Ack Time (Micro): {min_acknowledge_time}")
-
-    min_ack.append(min_acknowledge_time)
-    logging.debug(
-        f"SERVER ENV - VARIANCE: {statistics.variance(min_ack)}")
 
     # Based
     current_statistics['lrtt'] = min_acknowledge_time
@@ -122,20 +101,52 @@ def compute_statistics(cumulative_received_bytes: int,
                                                               'cwnd_bytes'],
                                                           current_statistics[
                                                               'inflight_bytes'])
-    current_statistics['throughput'] = throughput(cumulative_sent_bytes,
-                                                  current_statistics[
+
+    if last_receive_timestamp != current_statistics['last_receive_timestamp']:
+        current_statistics['throughput'] = throughput(current_statistics[
                                                       'sent_bytes'],
-                                                  last_receive_timestamp,
                                                   current_statistics[
-                                                      'last_receive_timestamp'])
+                                                      'last_receive_timestamp'],
+                                                  last_receive_timestamp)
+
+        current_statistics['last_receive_timestamp'] = last_receive_timestamp
+        current_statistics['sent_bytes'] = 0
+        current_statistics['received_bytes'] = 0
+        current_statistics['acked_bytes'] = 0
 
     # Temporary
-    current_statistics['sent_bytes'] = cumulative_sent_bytes
-    current_statistics['received_bytes'] = cumulative_received_bytes
+    current_statistics['sent_bytes'] += cumulative_sent_bytes
+    current_statistics['received_bytes'] += cumulative_received_bytes
+    current_statistics['acked_bytes'] += cumulative_received_bytes
+
+    logging.debug(f"ENV RECEIVED - Cumulative Receive bytes:"
+                  f" {cumulative_received_bytes}")
+    logging.debug(f"ENV RECEIVED - Cumulative Sent bytes:"
+                  f" {cumulative_sent_bytes}")
+    logging.debug(f"ENV RECEIVED - Cumulative Sent good bytes:"
+                  f" {cumulative_sent_good_bytes}")
+    logging.debug(
+        f"ENV RECEIVED - Current Window Size: {current_window_size}")
+    logging.debug(f"ENV RECEIVED - Last Received Timestamp (Micro):"
+                  f" {last_receive_timestamp}")
+    logging.debug(f"ENV RECEIVED - Unack Bytes: {unack_bytes}")
+    logging.debug(f"ENV RECEIVED - Retransmissions: {retransmissions}")
+    logging.debug(f"ENV RECEIVED - Chunk RTT (Micro): {chunk_rtt}")
+    logging.debug(
+        f"ENV RECEIVED - Min Ack Time (Micro): {min_acknowledge_time}")
+
+    min_ack.append(min_acknowledge_time)
+    logging.debug(f"ENV CAL - RTT MEAN: {statistics.mean(min_ack) * 2} ms")
+    logging.debug(
+        f"ENV CALC - RTT VARIANCE: {statistics.variance(min_ack) * 2} "
+        f"ms")
+    logging.debug(f"ENV CAL - RTT MAX: {max(min_ack) * 2} ms")
+    logging.debug(f"ENV CAL - RTT MIN: {min(min_ack) * 2} ms")
+    logging.debug(f"ENV CAL - THROUGHPUT: {current_statistics['throughput']}")
 
 
 # Mockets Congestion Window % action
-def cwnd_update(index):
+def cwnd_update(index) -> int:
     logging.debug("AGENT - UPDATE WITH ACTIONS %s", constants.ACTIONS[index])
     return math.ceil(current_statistics['cwnd_bytes'] + current_statistics[
         'cwnd_bytes'] * constants.ACTIONS[index])
