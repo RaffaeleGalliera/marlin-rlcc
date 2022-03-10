@@ -19,6 +19,7 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     'rtt_min',
                                     # Minimum RTT since beginning ep.
                                     'srtt',  # Smoothed RTT
+                                    'rtt_var',  # Variance in RTT
                                     'delay',  # Queuing delay measured in
                                     # rtt_standing - rtt_min
                                     'cwnd_bytes',  # Congestion window in
@@ -43,7 +44,6 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     # TODO: 'rtt_standing',  # Min RTT over
                                     # win of size
                                     # srtt/2 ??
-                                    # TODO: 'rtt_var',  # Variance in RTT
                                     # TODO: 'rtx_bytes',  # Number of bytes
                                     # retransmitted since last ACK
                                     # TODO: 'lost_bytes',  # Number of bytes
@@ -65,9 +65,24 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     ], 0.0)
 
 
+# (2.2) When the first RTT measurement R is made, the host MUST set
+#
+#             SRTT <- R
+#             RTTVAR <- R/2
+#
+# (2.3) When a subsequent RTT measurement R' is made, a host MUST set
+#
+#             RTTVAR <- (1 - beta) * RTTVAR + beta * |SRTT - R'|
+#             SRTT <- (1 - alpha) * SRTT + alpha * R'
+# https://datatracker.ietf.org/doc/html/rfc6298
 def smoothed_rtt(current_srtt: float, rtt: float, alpha: float):
-    return rtt if current_srtt is None else (1 - alpha) * current_srtt + \
-                                            alpha * rtt
+    return rtt if current_srtt is 0.0 else (1 - alpha) * current_srtt + alpha * rtt
+
+
+def rtt_var(current_srtt: float, current_rtt_var: float, rtt: float,
+            beta: float):
+    return rtt / 2 if current_rtt_var is 0.0 else (1 - beta) * current_rtt_var \
+                                                  + beta * abs(current_srtt - rtt)
 
 
 def writable_bytes(cwnd: float, inflight_bytes: float) -> float:
@@ -93,14 +108,18 @@ def compute_statistics(cumulative_received_bytes: int,
     current_statistics['lrtt'] = min_acknowledge_time
     current_statistics['cwnd_bytes'] = current_window_size
     current_statistics['inflight_bytes'] = unack_bytes
-    min_ack.append(min_acknowledge_time)
 
     # Further computation
+    min_ack.append(min_acknowledge_time)
     current_statistics['rtt_min'] = min(current_statistics['lrtt'],
                                         current_statistics['rtt_min'])
     current_statistics['srtt'] = smoothed_rtt(current_statistics['srtt'],
                                               current_statistics['lrtt'],
                                               constants.ALPHA)
+    current_statistics['rtt_var'] = rtt_var(current_statistics['srtt'],
+                                            current_statistics['rtt_var'],
+                                            current_statistics['lrtt'],
+                                            constants.BETA)
     current_statistics['writable_bytes'] = writable_bytes(current_statistics[
                                                               'cwnd_bytes'],
                                                           current_statistics[
@@ -122,21 +141,7 @@ def compute_statistics(cumulative_received_bytes: int,
     current_statistics['received_bytes'] += cumulative_received_bytes
     current_statistics['acked_bytes'] += cumulative_sent_bytes - unack_bytes
 
-    logging.debug(f"ENV RECEIVED - Cumulative Receive bytes:"
-                  f" {cumulative_received_bytes}")
-    logging.debug(f"ENV RECEIVED - Cumulative Sent bytes:"
-                  f" {cumulative_sent_bytes}")
-    logging.debug(f"ENV RECEIVED - Cumulative Sent good bytes:"
-                  f" {cumulative_sent_good_bytes}")
-    logging.debug(
-        f"ENV RECEIVED - Current Window Size: {current_window_size}")
-    logging.debug(f"ENV RECEIVED - Last Received Timestamp (Micro):"
-                  f" {last_receive_timestamp}")
-    logging.debug(f"ENV RECEIVED - Unack Bytes: {unack_bytes}")
-    logging.debug(f"ENV RECEIVED - Retransmissions: {retransmissions}")
-    logging.debug(f"ENV RECEIVED - Chunk RTT (Micro): {chunk_rtt}")
-    logging.debug(
-        f"ENV RECEIVED - Min Ack Time (Micro): {min_acknowledge_time}")
+    logging.debug("\n".join(f"ENV NEW STATS - {stat}: {value}" for stat, value in current_statistics.items()))
 
     logging.debug(f"ENV CAL - RTT MEAN: {statistics.mean(min_ack)} ms")
     logging.debug(
@@ -151,7 +156,9 @@ def compute_statistics(cumulative_received_bytes: int,
 
 # Mockets Congestion Window % action
 def cwnd_update(index) -> int:
-    action = math.ceil(current_statistics['cwnd_bytes'] + current_statistics['cwnd_bytes'] * constants.ACTIONS[index])
+    action = math.ceil(
+        current_statistics['cwnd_bytes'] + current_statistics['cwnd_bytes'] *
+        constants.ACTIONS[index])
     current_statistics['set_cwnd_bytes'] = action
 
     logging.debug(f"AGENT - CURRENT CWND {current_statistics['cwnd_bytes']} "
