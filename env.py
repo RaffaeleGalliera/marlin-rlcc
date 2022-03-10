@@ -1,3 +1,4 @@
+import queue
 import time
 from multiprocessing import Queue, Process
 import numpy as np
@@ -61,8 +62,10 @@ class CongestionControlEnv(Env):
         self._server_process.start()
 
     def _get_state(self) -> np.array:
-        parameters = self._state_queue.get()
-        mpo.compute_statistics(
+        while True:
+            logging.info("GETTING NEW PARAMS - WAITING CWND TO REFLECT...")
+            parameters = self._state_queue.get()
+            mpo.compute_statistics(
                 parameters[0],
                 parameters[1],
                 parameters[2],
@@ -74,7 +77,16 @@ class CongestionControlEnv(Env):
                 parameters[8]
             )
 
-        self.state = np.array([mpo.current_statistics[x] for x in constants.STATE])
+            logging.debug(f"CURRENT STEP {self.current_step}")
+            logging.debug(f"CWND BYTES {mpo.current_statistics['cwnd_bytes']}")
+            logging.debug(f"SET CWND BYTES"
+                          f" {mpo.current_statistics['set_cwnd_bytes']}")
+            if self.current_step == 0 \
+                    or mpo.current_statistics['cwnd_bytes'] == mpo.current_statistics['set_cwnd_bytes']:
+                break
+
+        self.state = np.array(
+            [mpo.current_statistics[x] for x in constants.STATE])
 
         return self.state
 

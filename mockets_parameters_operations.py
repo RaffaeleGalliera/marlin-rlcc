@@ -36,6 +36,10 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     'throughput',  # Instant throughput
                                     # estimated from recent ACKs
                                     'last_receive_timestamp',
+                                    'sent_bytes_in_time_window',
+                                    # Sent bytes in last_receive_timestamp
+                                    # window. Used for approximate throughput
+                                    'set_cwnd_bytes'
                                     # TODO: 'rtt_standing',  # Min RTT over
                                     # win of size
                                     # srtt/2 ??
@@ -85,11 +89,11 @@ def compute_statistics(cumulative_received_bytes: int,
                        retransmissions: int,
                        chunk_rtt: int,
                        min_acknowledge_time: int) -> None:
-
     # Based
     current_statistics['lrtt'] = min_acknowledge_time
     current_statistics['cwnd_bytes'] = current_window_size
     current_statistics['inflight_bytes'] = unack_bytes
+    min_ack.append(min_acknowledge_time)
 
     # Further computation
     current_statistics['rtt_min'] = min(current_statistics['lrtt'],
@@ -104,20 +108,19 @@ def compute_statistics(cumulative_received_bytes: int,
 
     if last_receive_timestamp != current_statistics['last_receive_timestamp']:
         current_statistics['throughput'] = throughput(current_statistics[
-                                                      'sent_bytes'],
-                                                  current_statistics[
-                                                      'last_receive_timestamp'],
-                                                  last_receive_timestamp)
+                                                          'sent_bytes_in_time_window'],
+                                                      current_statistics[
+                                                          'last_receive_timestamp'],
+                                                      last_receive_timestamp)
 
         current_statistics['last_receive_timestamp'] = last_receive_timestamp
-        current_statistics['sent_bytes'] = 0
-        current_statistics['received_bytes'] = 0
-        current_statistics['acked_bytes'] = 0
+        current_statistics['sent_bytes_in_time_window'] = 0
 
     # Temporary
+    current_statistics['sent_bytes_in_time_window'] += cumulative_sent_bytes
     current_statistics['sent_bytes'] += cumulative_sent_bytes
     current_statistics['received_bytes'] += cumulative_received_bytes
-    current_statistics['acked_bytes'] += cumulative_received_bytes
+    current_statistics['acked_bytes'] += cumulative_sent_bytes - unack_bytes
 
     logging.debug(f"ENV RECEIVED - Cumulative Receive bytes:"
                   f" {cumulative_received_bytes}")
@@ -135,18 +138,23 @@ def compute_statistics(cumulative_received_bytes: int,
     logging.debug(
         f"ENV RECEIVED - Min Ack Time (Micro): {min_acknowledge_time}")
 
-    min_ack.append(min_acknowledge_time)
-    logging.debug(f"ENV CAL - RTT MEAN: {statistics.mean(min_ack) * 2} ms")
+    logging.debug(f"ENV CAL - RTT MEAN: {statistics.mean(min_ack)} ms")
     logging.debug(
-        f"ENV CALC - RTT VARIANCE: {statistics.variance(min_ack) * 2} "
+        f"ENV CALC - RTT VARIANCE: {statistics.variance(min_ack)} "
         f"ms")
-    logging.debug(f"ENV CAL - RTT MAX: {max(min_ack) * 2} ms")
-    logging.debug(f"ENV CAL - RTT MIN: {min(min_ack) * 2} ms")
+    logging.debug(f"ENV CAL - RTT MAX: {max(min_ack)} ms")
+    logging.debug(f"ENV CAL - RTT MIN: {min(min_ack)} ms")
     logging.debug(f"ENV CAL - THROUGHPUT: {current_statistics['throughput']}")
+    logging.debug(f"ENV CAL - SENT BYTES IN TIMESTAMP DIFFERENCE:"
+                  f" {current_statistics['sent_bytes_in_time_window']}")
 
 
 # Mockets Congestion Window % action
 def cwnd_update(index) -> int:
-    logging.debug("AGENT - UPDATE WITH ACTIONS %s", constants.ACTIONS[index])
-    return math.ceil(current_statistics['cwnd_bytes'] + current_statistics[
-        'cwnd_bytes'] * constants.ACTIONS[index])
+    action = math.ceil(current_statistics['cwnd_bytes'] + current_statistics['cwnd_bytes'] * constants.ACTIONS[index])
+    current_statistics['set_cwnd_bytes'] = action
+
+    logging.debug(f"AGENT - CURRENT CWND {current_statistics['cwnd_bytes']} "
+                  f"UPDATE WITH ACTION {constants.ACTIONS[index]} RETURNING "
+                  f"{action}")
+    return action
