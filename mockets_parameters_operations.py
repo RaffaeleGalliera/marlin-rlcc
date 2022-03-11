@@ -36,11 +36,11 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     # in this ACK
                                     'throughput',  # Instant throughput
                                     # estimated from recent ACKs
-                                    'last_receive_timestamp',
+                                    'goodput',
+                                    'acked_bytes_in_time_window',
                                     'sent_bytes_in_time_window',
                                     # Sent bytes in last_receive_timestamp
                                     # window. Used for approximate throughput
-                                    'set_cwnd_bytes'
                                     # TODO: 'rtt_standing',  # Min RTT over
                                     # win of size
                                     # srtt/2 ??
@@ -64,6 +64,12 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     # is detected
                                     ], 0.0)
 
+stats_helper = dict.fromkeys(['last_receive_timestamp',
+                              'prev_sent_bytes',
+                              'prev_acked_bytes',
+                              'set_cwnd_bytes'
+                              ], 0.0)
+
 
 # (2.2) When the first RTT measurement R is made, the host MUST set
 #
@@ -76,6 +82,7 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
 #             SRTT <- (1 - alpha) * SRTT + alpha * R'
 # https://datatracker.ietf.org/doc/html/rfc6298
 def smoothed_rtt(current_srtt: float, rtt: float, alpha: float):
+    # SRTT is an exponential moving average (EMA) with decay
     return rtt if current_srtt is 0.0 else (1 - alpha) * current_srtt + alpha * rtt
 
 
@@ -125,18 +132,34 @@ def compute_statistics(cumulative_received_bytes: int,
                                                           current_statistics[
                                                               'inflight_bytes'])
 
-    if last_receive_timestamp != current_statistics['last_receive_timestamp']:
+    if last_receive_timestamp != stats_helper['last_receive_timestamp']:
+        current_statistics['sent_bytes_in_time_window'] = current_statistics[
+                                                              'sent_bytes'] -\
+                                                          stats_helper[
+                                                              'prev_sent_bytes']
+
+        current_statistics['acked_bytes_in_time_window'] = current_statistics[
+                                                              'acked_bytes'] - \
+                                                          stats_helper[
+                                                              'prev_acked_bytes']
         current_statistics['throughput'] = throughput(current_statistics[
                                                           'sent_bytes_in_time_window'],
-                                                      current_statistics[
+                                                      stats_helper[
                                                           'last_receive_timestamp'],
                                                       last_receive_timestamp)
 
-        current_statistics['last_receive_timestamp'] = last_receive_timestamp
-        current_statistics['sent_bytes_in_time_window'] = 0
+        current_statistics['goodput'] = throughput(current_statistics[
+                                                       'acked_bytes_in_time_window'],
+                                                   stats_helper[
+                                                          'last_receive_timestamp'],
+                                                   last_receive_timestamp)
+
+        stats_helper['last_receive_timestamp'] = last_receive_timestamp
+        stats_helper['prev_sent_bytes'] += current_statistics['sent_bytes']
+        stats_helper['prev_acked_bytes'] += current_statistics['acked_bytes']
+
 
     # Temporary
-    current_statistics['sent_bytes_in_time_window'] += cumulative_sent_bytes
     current_statistics['sent_bytes'] += cumulative_sent_bytes
     current_statistics['received_bytes'] += cumulative_received_bytes
     current_statistics['acked_bytes'] += cumulative_sent_bytes - unack_bytes
@@ -159,9 +182,18 @@ def cwnd_update(index) -> int:
     action = math.ceil(
         current_statistics['cwnd_bytes'] + current_statistics['cwnd_bytes'] *
         constants.ACTIONS[index])
-    current_statistics['set_cwnd_bytes'] = action
+    stats_helper['set_cwnd_bytes'] = action
 
     logging.debug(f"AGENT - CURRENT CWND {current_statistics['cwnd_bytes']} "
                   f"UPDATE WITH ACTION {constants.ACTIONS[index]} RETURNING "
                   f"{action}")
     return action
+
+
+def leaky_relu(alpha, val):
+    return max(alpha * val, val)
+
+
+def reward_function(throughput, goodput, rtt, rtt_ema, rtt_min):
+    return math.log(throughput/rtt_ema) + leaky_relu(0.2, rtt - rtt_min) * \
+        math.log(goodput/throughput)

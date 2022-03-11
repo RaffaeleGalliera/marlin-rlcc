@@ -20,7 +20,7 @@ class CongestionControlEnv(Env):
                  episode_lenght: int = 1000,
                  eps: float = 0.05,
                  num_actions: int = 6,
-                 observation_length: int = 11):
+                 observation_length: int = 12):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -62,8 +62,34 @@ class CongestionControlEnv(Env):
         self._server_process.start()
 
     def _get_state(self) -> np.array:
+        logging.info("GETTING NEW PARAMS - WAITING CWND TO REFLECT...")
+        parameters = self._state_queue.get()
+        mpo.compute_statistics(
+            parameters[0],
+            parameters[1],
+            parameters[2],
+            parameters[3],
+            parameters[4],
+            parameters[5],
+            parameters[6],
+            parameters[7],
+            parameters[8]
+        )
+
+        self.state = np.array(
+            [mpo.current_statistics[x] for x in constants.STATE])
+
+        return self.state
+
+    def _next_observation(self) -> np.array:
+        return self._get_state()
+
+    def _put_action(self, action):
+        self._action_queue.put(action)
+
+    def _get_reward(self) -> float:
         while True:
-            logging.info("GETTING NEW PARAMS - WAITING CWND TO REFLECT...")
+            logging.info("GETTING NEW PARAMS - WAITING REWARD REFLECTION...")
             parameters = self._state_queue.get()
             mpo.compute_statistics(
                 parameters[0],
@@ -80,24 +106,20 @@ class CongestionControlEnv(Env):
             logging.debug(f"CURRENT STEP {self.current_step}")
             logging.debug(f"CWND BYTES {mpo.current_statistics['cwnd_bytes']}")
             logging.debug(f"SET CWND BYTES"
-                          f" {mpo.current_statistics['set_cwnd_bytes']}")
+                          f" {mpo.stats_helper['set_cwnd_bytes']}")
             if self.current_step == 0 \
-                    or mpo.current_statistics['cwnd_bytes'] == mpo.current_statistics['set_cwnd_bytes']:
+                    or mpo.current_statistics['cwnd_bytes'] == \
+                    mpo.stats_helper['set_cwnd_bytes']:
                 break
+        reward = mpo.reward_function(mpo.current_statistics['throughput'],
+                                     mpo.current_statistics['goodput'],
+                                     mpo.current_statistics['lrtt'],
+                                     mpo.current_statistics['rtt_var'],
+                                     mpo.current_statistics['rtt_min'])
 
-        self.state = np.array(
-            [mpo.current_statistics[x] for x in constants.STATE])
+        logging.info(f"REWARD PRODUCED: {reward}")
 
-        return self.state
-
-    def _next_observation(self) -> np.array:
-        return self._get_state()
-
-    def _put_action(self, action):
-        self._action_queue.put(action)
-
-    def _get_reward(self) -> float:
-        return mpo.current_statistics['throughput']
+        return reward
 
     def reset(self) -> GymObs:
         self.current_step = 0
