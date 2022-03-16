@@ -62,7 +62,7 @@ class CongestionControlEnv(Env):
         self._server_process.start()
 
     def _get_state(self) -> np.array:
-        logging.info("GETTING NEW PARAMS - WAITING CWND TO REFLECT...")
+        logging.info("GETTING NEW PARAMS")
         parameters = self._state_queue.get()
         mpo.compute_statistics(
             parameters[0],
@@ -88,6 +88,7 @@ class CongestionControlEnv(Env):
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
+        # TODO: When should allow to proceed with the next action?
         while True:
             logging.info("GETTING NEW PARAMS - WAITING REWARD REFLECTION...")
             parameters = self._state_queue.get()
