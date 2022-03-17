@@ -62,19 +62,20 @@ class CongestionControlEnv(Env):
         self._server_process.start()
 
     def _get_state(self) -> np.array:
-        logging.info("GETTING NEW PARAMS")
-        parameters = self._state_queue.get()
-        mpo.compute_statistics(
-            parameters[0],
-            parameters[1],
-            parameters[2],
-            parameters[3],
-            parameters[4],
-            parameters[5],
-            parameters[6],
-            parameters[7],
-            parameters[8]
-        )
+        logging.info("FEEDING STATE..")
+        if self.current_step == 0:
+            parameters = self._state_queue.get()
+            mpo.compute_statistics(
+                parameters[0],
+                parameters[1],
+                parameters[2],
+                parameters[3],
+                parameters[4],
+                parameters[5],
+                parameters[6],
+                parameters[7],
+                parameters[8]
+            )
 
         self.state = np.array(
             [mpo.current_statistics[x] for x in constants.STATE])
@@ -108,11 +109,10 @@ class CongestionControlEnv(Env):
             logging.debug(f"CWND BYTES {mpo.current_statistics['cwnd_bytes']}")
             logging.debug(f"SET CWND BYTES"
                           f" {mpo.stats_helper['set_cwnd_bytes']}")
-            if self.current_step == 0 \
-                    or mpo.current_statistics['cwnd_bytes'] == \
-                    mpo.stats_helper['set_cwnd_bytes']:
+            if mpo.current_statistics['cwnd_bytes'] == mpo.stats_helper['set_cwnd_bytes']:
                 break
-        reward = mpo.reward_function(mpo.current_statistics['throughput'],
+
+        reward = mpo.reward_function(mpo.current_statistics['ema_throughput'],
                                      mpo.current_statistics['goodput'],
                                      mpo.current_statistics['lrtt'],
                                      mpo.current_statistics['rtt_var'],

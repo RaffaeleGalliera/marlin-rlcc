@@ -36,6 +36,7 @@ current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
                                     # in this ACK
                                     'throughput',  # Instant throughput
                                     # estimated from recent ACKs
+                                    'ema_throughput',
                                     'goodput',
                                     'acked_bytes_in_time_window',
                                     'sent_bytes_in_time_window',
@@ -102,6 +103,14 @@ def throughput(sent_bytes: float, timestamp_t1: float, timestamp_t2: float,
     return sent_bytes / (timestamp_t2 - timestamp_t1)
 
 
+def ema_throughput(current_ema_throughput: float, current_throughput: float,
+                   alpha: float):
+    if current_ema_throughput is 0.0:
+        return current_throughput
+    else:
+        return (1 - alpha) * current_ema_throughput + alpha * current_throughput
+
+
 # Mockets Congestion Window % action
 def cwnd_update(index) -> int:
     action = math.ceil(
@@ -119,9 +128,8 @@ def leaky_relu(alpha, val):
     return max(alpha * val, val)
 
 
-def reward_function(throughput, goodput, rtt, rtt_ema, rtt_min):
-    return math.log(throughput/rtt_ema) + leaky_relu(0.2, rtt - rtt_min) * \
-        math.log(goodput/throughput)
+def reward_function(ema_throughput, goodput, rtt, rtt_ema, rtt_min):
+    return math.log(goodput/ema_throughput)
 
 
 def debug_stats_information():
@@ -168,6 +176,11 @@ def compute_statistics(cumulative_received_bytes: int,
                                                               'cwnd_bytes'],
                                                           current_statistics[
                                                               'inflight_bytes'])
+    current_statistics['ema_throughput'] = ema_throughput(current_statistics[
+                                                              'ema_throughput'],
+                                                          current_statistics[
+                                                              'throughput'],
+                                                          alpha=constants.ALPHA)
 
     if last_receive_timestamp != stats_helper['last_receive_timestamp']:
         current_statistics['sent_bytes_in_time_window'] = current_statistics[
