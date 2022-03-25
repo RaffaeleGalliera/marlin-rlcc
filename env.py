@@ -11,6 +11,7 @@ from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 import data_processing_server.congestion_control_server as cc_server
 import mockets_parameters_operations as mpo
 import constants
+from constants import Parameters
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -20,7 +21,7 @@ class CongestionControlEnv(Env):
                  episode_lenght: int = 1000,
                  eps: float = 0.05,
                  num_actions: int = 6,
-                 observation_length: int = 12):
+                 observation_length: int = 20):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -64,21 +65,14 @@ class CongestionControlEnv(Env):
     def _get_state(self) -> np.array:
         logging.info("FEEDING STATE..")
         if self.current_step == 0:
-            parameters = self._state_queue.get()
-            mpo.compute_statistics(
-                parameters[0],
-                parameters[1],
-                parameters[2],
-                parameters[3],
-                parameters[4],
-                parameters[5],
-                parameters[6],
-                parameters[7],
-                parameters[8]
-            )
-
+            while True:
+                logging.info("WARMUP - WAITING FIRST SENT..")
+                parameter = self._state_queue.get()
+                mpo.update_statistics(parameter)
+                if mpo.current_statistics[Parameters.SENT_BYTES] > 0:
+                    break
         self.state = np.array(
-            [mpo.current_statistics[x] for x in constants.STATE])
+            [mpo.current_statistics[x] for x in Parameters])
 
         return self.state
 
@@ -92,31 +86,22 @@ class CongestionControlEnv(Env):
         # TODO: When should allow to proceed with the next action?
         while True:
             logging.info("GETTING NEW PARAMS - WAITING REWARD REFLECTION...")
-            parameters = self._state_queue.get()
-            mpo.compute_statistics(
-                parameters[0],
-                parameters[1],
-                parameters[2],
-                parameters[3],
-                parameters[4],
-                parameters[5],
-                parameters[6],
-                parameters[7],
-                parameters[8]
-            )
+            parameter = self._state_queue.get()
+            mpo.update_statistics(parameter)
 
             logging.debug(f"CURRENT STEP {self.current_step}")
-            logging.debug(f"CWND BYTES {mpo.current_statistics['cwnd_bytes']}")
+            logging.debug(f"CWND BYTES {mpo.current_statistics[Parameters.CURR_WINDOW_SIZE]}")
             logging.debug(f"SET CWND BYTES"
-                          f" {mpo.stats_helper['set_cwnd_bytes']}")
-            if mpo.current_statistics['cwnd_bytes'] == mpo.stats_helper['set_cwnd_bytes']:
+                          f" {mpo.prev_stats_helper[Parameters.CURR_WINDOW_SIZE]}")
+            if mpo.current_statistics[Parameters.CURR_WINDOW_SIZE] == mpo.prev_stats_helper[
+                Parameters.CURR_WINDOW_SIZE]:
                 break
 
-        reward = mpo.reward_function(mpo.current_statistics['ema_throughput'],
-                                     mpo.current_statistics['goodput'],
-                                     mpo.current_statistics['lrtt'],
-                                     mpo.current_statistics['rtt_var'],
-                                     mpo.current_statistics['rtt_min'])
+        reward = mpo.reward_function(mpo.current_statistics[Parameters.EMA_THROUGHPUT],
+                                     mpo.current_statistics[Parameters.THROUGHPUT],
+                                     mpo.current_statistics[Parameters.LAST_RTT],
+                                     mpo.current_statistics[Parameters.VAR_RTT],
+                                     mpo.current_statistics[Parameters.MIN_RTT])
 
         logging.info(f"REWARD PRODUCED: {reward}")
 

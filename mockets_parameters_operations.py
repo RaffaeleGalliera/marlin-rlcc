@@ -12,65 +12,66 @@ import logging
 import constants
 import math
 import statistics
+from constants import Parameters
 
 # Initialize current_statistics with None
-min_ack = [0]
-current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
-                                    'rtt_min',
-                                    # Minimum RTT since beginning ep.
-                                    'srtt',  # Smoothed RTT
-                                    'rtt_var',  # Variance in RTT
-                                    'delay',  # Queuing delay measured in
-                                    # rtt_standing - rtt_min
-                                    'cwnd_bytes',  # Congestion window in
-                                    # bytes calculated as cwnd * MSS ??
-                                    'inflight_bytes',  # Number of bytes sent
-                                    # but unacked
-                                    'writable_bytes',  # Number of writable
-                                    # bytes cwnd_bytes - inflight_bytes
-                                    'sent_bytes',  # Number of bytes sent
-                                    # since last ACK (LAST RECEIVE??)
-                                    'received_bytes',  # Number of byte
-                                    # received since last ACK (LAST RECEIVE??)
-                                    'acked_bytes',  # Number of bytes acked
-                                    # in this ACK
-                                    'throughput',  # Instant throughput
-                                    # estimated from recent ACKs
-                                    'ema_throughput',
-                                    'goodput',
-                                    'acked_bytes_in_time_window',
-                                    'sent_bytes_in_time_window',
-                                    # Sent bytes in last_receive_timestamp
-                                    # window. Used for approximate throughput
-                                    # TODO: 'rtt_standing',  # Min RTT over
-                                    # win of size
-                                    # srtt/2 ??
-                                    # TODO: 'rtx_bytes',  # Number of bytes
-                                    # retransmitted since last ACK
-                                    # TODO: 'lost_bytes',  # Number of bytes
-                                    # lost in
-                                    # this loss
-                                    # TODO:'rtx_count',  # Number of pakcets
-                                    # retransmitted since last ACK
-                                    # TODO: 'timeout_based_rtx_count',
-                                    # Number of
-                                    # Retransmissions due to PTO since last ACK
-                                    # TODO: 'pto_count',  # Number of times
-                                    # packet
-                                    # loss timer fired before receiving an ACK
-                                    # TODO: 'total_pto_count',  # Number of times
-                                    # packet loss timer fired since last ACK
-                                    # TODO: 'persistent_congestion'  # Flag
-                                    # indicating whether persistent congestion
-                                    # is detected
-                                    ], 0.0)
+min_ack = [0.0]
+
+# current_statistics = dict.fromkeys(['lrtt',  # Last RTT in ms
+#                                     'rtt_min',
+#                                     # Minimum RTT since beginning ep.
+#                                     'srtt',  # Smoothed RTT
+#                                     'rtt_var',  # Variance in RTT
+#                                     'delay',  # Queuing delay measured in
+#                                     # rtt_standing - rtt_min
+#                                     'cwnd_bytes',  # Congestion window in
+#                                     # bytes calculated as cwnd * MSS ??
+#                                     'inflight_bytes',  # Number of bytes sent
+#                                     # but unacked
+#                                     'writable_bytes',  # Number of writable
+#                                     # bytes cwnd_bytes - inflight_bytes
+#                                     'sent_bytes',  # Number of bytes sent
+#                                     # since last ACK (LAST RECEIVE??)
+#                                     'received_bytes',  # Number of byte
+#                                     # received since last ACK (LAST RECEIVE??)
+#                                     'acked_bytes',  # Number of bytes acked
+#                                     # in this ACK
+#                                     'throughput',  # Instant throughput
+#                                     # estimated from recent ACKs
+#                                     'ema_throughput',
+#                                     'goodput',
+#                                     'acked_bytes_in_time_window',
+#                                     'sent_bytes_in_time_window',
+#                                     # Sent bytes in last_receive_timestamp
+#                                     # window. Used for approximate throughput
+#                                     # TODO: 'rtt_standing',  # Min RTT over
+#                                     # win of size
+#                                     # srtt/2 ??
+#                                     # TODO: 'rtx_bytes',  # Number of bytes
+#                                     # retransmitted since last ACK
+#                                     # TODO: 'lost_bytes',  # Number of bytes
+#                                     # lost in
+#                                     # this loss
+#                                     # TODO:'rtx_count',  # Number of pakcets
+#                                     # retransmitted since last ACK
+#                                     # TODO: 'timeout_based_rtx_count',
+#                                     # Number of
+#                                     # Retransmissions due to PTO since last ACK
+#                                     # TODO: 'pto_count',  # Number of times
+#                                     # packet
+#                                     # loss timer fired before receiving an ACK
+#                                     # TODO: 'total_pto_count',  # Number of times
+#                                     # packet loss timer fired since last ACK
+#                                     # TODO: 'persistent_congestion'  # Flag
+#                                     # indicating whether persistent congestion
+#                                     # is detected
+#                                     ], 0.0)
+
+current_statistics = dict((param, 0.0) for param in Parameters)
 
 # Additional parameters to help with stats calculation
-stats_helper = dict.fromkeys(['last_receive_timestamp',
-                              'prev_sent_bytes',
-                              'prev_acked_bytes',
-                              'set_cwnd_bytes'
-                              ], 0.0)
+prev_stats_helper = dict((param, 0.0) for param in Parameters)
+timestamps = dict((param, 0) for param in Parameters)
 
 
 # (2.2) When the first RTT measurement R is made, the host MUST set
@@ -98,9 +99,8 @@ def writable_bytes(cwnd: float, inflight_bytes: float) -> float:
     return cwnd - inflight_bytes
 
 
-def throughput(sent_bytes: float, timestamp_t1: float, timestamp_t2: float,
-               ) -> float:
-    return sent_bytes / (timestamp_t2 - timestamp_t1)
+def throughput(sent_bytes: float, delta: int) -> float:
+    return sent_bytes / delta
 
 
 def ema_throughput(current_ema_throughput: float, current_throughput: float,
@@ -114,11 +114,11 @@ def ema_throughput(current_ema_throughput: float, current_throughput: float,
 # Mockets Congestion Window % action
 def cwnd_update(index) -> int:
     action = math.ceil(
-        current_statistics['cwnd_bytes'] + current_statistics['cwnd_bytes'] *
-        constants.ACTIONS[index])
-    stats_helper['set_cwnd_bytes'] = action
+        current_statistics[Parameters.CURR_WINDOW_SIZE] + current_statistics[
+            Parameters.CURR_WINDOW_SIZE] * constants.ACTIONS[index])
+    prev_stats_helper[Parameters.CURR_WINDOW_SIZE] = action
 
-    logging.debug(f"AGENT - CURRENT CWND {current_statistics['cwnd_bytes']} "
+    logging.debug(f"AGENT - CURRENT CWND {current_statistics[Parameters.CURR_WINDOW_SIZE]} "
                   f"UPDATE WITH ACTION {constants.ACTIONS[index]} RETURNING "
                   f"{action}")
     return action
@@ -128,87 +128,78 @@ def leaky_relu(alpha, val):
     return max(alpha * val, val)
 
 
-def reward_function(ema_throughput, goodput, rtt, rtt_ema, rtt_min):
-    return math.log(goodput/ema_throughput)
+def reward_function(current_ema_throughput, goodput, rtt, rtt_ema, rtt_min):
+    return math.log(goodput/current_ema_throughput)
 
 
 def debug_stats_information():
-    logging.debug("\n".join(f"ENV NEW STATS - {stat}: {value}" for stat, value in current_statistics.items()))
-
-    logging.debug(f"ENV CAL - RTT MEAN: {statistics.mean(min_ack)} ms")
-    logging.debug(
-        f"ENV CALC - RTT VARIANCE: {statistics.variance(min_ack)} "
-        f"ms")
-    logging.debug(f"ENV CAL - RTT MAX: {max(min_ack)} ms")
-    logging.debug(f"ENV CAL - RTT MIN: {min(min_ack)} ms")
-    logging.debug(f"ENV CAL - THROUGHPUT: {current_statistics['throughput']}")
-    logging.debug(f"ENV CAL - SENT BYTES IN TIMESTAMP DIFFERENCE:"
-                  f" {current_statistics['sent_bytes_in_time_window']}")
+    logging.debug("\n".join(f"ENV STATS - {stat}: {value}" for stat, value in current_statistics.items()))
 
 
-# Just a placeholder for the time being
-def compute_statistics(cumulative_received_bytes: int,
-                       cumulative_sent_bytes: int,
-                       cumulative_sent_good_bytes: int,
-                       current_window_size: int,
-                       last_receive_timestamp: int,
-                       unack_bytes: int,
-                       retransmissions: int,
-                       chunk_rtt: int,
-                       min_acknowledge_time: int) -> None:
-    # Based
-    current_statistics['lrtt'] = min_acknowledge_time
-    current_statistics['cwnd_bytes'] = current_window_size
-    current_statistics['inflight_bytes'] = unack_bytes
+def update_statistics(param) -> None:
+    param_type = param['parameter_type']
+    logging.debug(param_type)
+    # Param type is the int value associated to the enum
+    if Parameters(param_type) is Parameters.CURR_WINDOW_SIZE:
+        current_statistics[Parameters.CURR_WINDOW_SIZE] = param['value']
+        timestamps[Parameters.CURR_WINDOW_SIZE] = param['timestamp']
 
-    # Further computation
-    min_ack.append(min_acknowledge_time)
-    current_statistics['rtt_min'] = min(current_statistics['lrtt'],
-                                        current_statistics['rtt_min'])
-    current_statistics['srtt'] = smoothed_rtt(current_statistics['srtt'],
-                                              current_statistics['lrtt'],
-                                              constants.ALPHA)
-    current_statistics['rtt_var'] = rtt_var(current_statistics['srtt'],
-                                            current_statistics['rtt_var'],
-                                            current_statistics['lrtt'],
-                                            constants.BETA)
-    current_statistics['writable_bytes'] = writable_bytes(current_statistics[
-                                                              'cwnd_bytes'],
-                                                          current_statistics[
-                                                              'inflight_bytes'])
-    current_statistics['ema_throughput'] = ema_throughput(current_statistics[
-                                                              'ema_throughput'],
-                                                          current_statistics[
-                                                              'throughput'],
-                                                          alpha=constants.ALPHA)
+        current_statistics[Parameters.WRITABLE_BYTES] = writable_bytes(
+            current_statistics[Parameters.CURR_WINDOW_SIZE],
+            current_statistics[Parameters.INFLIGHT_BYTES])
 
-    if last_receive_timestamp != stats_helper['last_receive_timestamp']:
-        current_statistics['sent_bytes_in_time_window'] = current_statistics[
-                                                              'sent_bytes'] -\
-                                                          stats_helper[
-                                                              'prev_sent_bytes']
+    elif Parameters(param_type) is Parameters.MIN_ACK_TIME_MICRO:
+        # min_ack.append(current_statistics['lrtt'])
+        current_statistics[Parameters.LAST_RTT] = param['value']
+        # current_statistics[Parameters.MIN_RTT] = min(current_statistics['lrtt'],
+        #                                     current_statistics['rtt_min'])
+        current_statistics[Parameters.SRTT] = smoothed_rtt(
+            current_statistics[Parameters.SRTT],
+            current_statistics[Parameters.LAST_RTT],
+            constants.ALPHA
+        )
 
-        current_statistics['acked_bytes_in_time_window'] = current_statistics[
-                                                              'acked_bytes'] - \
-                                                          stats_helper[
-                                                              'prev_acked_bytes']
-        current_statistics['throughput'] = throughput(current_statistics[
-                                                          'sent_bytes_in_time_window'],
-                                                      stats_helper[
-                                                          'last_receive_timestamp'],
-                                                      last_receive_timestamp)
+        current_statistics[Parameters.VAR_RTT] = rtt_var(
+            current_statistics[Parameters.SRTT],
+            current_statistics[Parameters.VAR_RTT],
+            current_statistics[Parameters.LAST_RTT],
+            constants.BETA
+        )
 
-        current_statistics['goodput'] = throughput(current_statistics[
-                                                       'acked_bytes_in_time_window'],
-                                                   stats_helper[
-                                                          'last_receive_timestamp'],
-                                                   last_receive_timestamp)
+    # New Sent notification
+    elif Parameters(param_type) is Parameters.SENT_BYTES:
+        delta = param['timestamp'] - timestamps[Parameters.SENT_BYTES]
+        current_statistics[Parameters.SENT_BYTES] += param['value']
+        timestamps[Parameters.SENT_BYTES] = param['timestamp']
 
-        stats_helper['last_receive_timestamp'] = last_receive_timestamp
-        stats_helper['prev_sent_bytes'] += current_statistics['sent_bytes']
-        stats_helper['prev_acked_bytes'] += current_statistics['acked_bytes']
+        current_statistics[Parameters.SENT_BYTES_TIMEFRAME] = \
+            current_statistics[Parameters.SENT_BYTES] - prev_stats_helper[Parameters.SENT_BYTES]
 
-    # Temporary
-    current_statistics['sent_bytes'] += cumulative_sent_bytes
-    current_statistics['received_bytes'] += cumulative_received_bytes
-    current_statistics['acked_bytes'] += cumulative_sent_bytes - unack_bytes
+        current_statistics[Parameters.ACKED_BYTES_IN_TIMEFRAME] = \
+            current_statistics[Parameters.ACKED_BYTES] - prev_stats_helper[
+                Parameters.ACKED_BYTES]
+
+        current_statistics[Parameters.THROUGHPUT] = throughput(
+            current_statistics[Parameters.SENT_BYTES_TIMEFRAME],
+            delta
+        )
+
+        current_statistics[Parameters.GOODPUT] = throughput(
+            current_statistics[Parameters.ACKED_BYTES_IN_TIMEFRAME],
+            delta
+        )
+
+        current_statistics[Parameters.EMA_THROUGHPUT] = ema_throughput(
+            current_statistics[Parameters.EMA_THROUGHPUT],
+            current_statistics[Parameters.THROUGHPUT],
+            alpha=constants.ALPHA
+        )
+
+        prev_stats_helper[Parameters.SENT_BYTES] = current_statistics[Parameters.SENT_BYTES]
+        prev_stats_helper[Parameters.ACKED_BYTES] = current_statistics[Parameters.ACKED_BYTES]
+
+    else:
+        current_statistics[Parameters(param_type)] += param['value']
+        timestamps[Parameters(param_type)] = param['timestamp']
+
+    debug_stats_information()

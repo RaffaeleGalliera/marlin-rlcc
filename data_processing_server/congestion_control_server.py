@@ -26,27 +26,22 @@ class CongestionControlService(
     # with JMockets
     async def OptimizeCongestionControl(self,
                                         request_iterator: AsyncIterable[
-                                            congestion_control_pb2.TransmissionStatus],
+                                            congestion_control_pb2.Parameter],
                                         unused_context) -> AsyncIterable[
         congestion_control_pb2.Action]:
-        async for status in request_iterator:
-            parameters = np.array([
-                status.cumulative_received_bytes,
-                status.cumulative_sent_bytes,
-                status.cumulative_sent_good_bytes,
-                status.current_window_size,
-                status.last_receive_time,
-                status.unack_bytes,
-                status.retransmissions,
-                status.chunk_rtt,
-                status.min_acknowledge_time
-            ])
 
+        parameter = dict()
+        async for status in request_iterator:
             # Run the I/O blocking Queue communication with Marlin
             # Environment in a different thread and wait for response
             loop = asyncio.get_event_loop()
             logging.debug("GRPC SERVER - Sending message...")
-            await loop.run_in_executor(None, self._state_queue.put, parameters)
+            parameter = {
+                'value': status.value,
+                'parameter_type': status.parameter_type,
+                'timestamp': status.timestamp
+            }
+            await loop.run_in_executor(None, self._state_queue.put, parameter)
 
             try:
                 action = await loop.run_in_executor(None,
