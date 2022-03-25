@@ -7,32 +7,31 @@ option java_outer_classname = "CongestionControlProto";
 
 // Interface exported by the server
 service CongestionControl {
-
     // Define a Bidirectional streaming
     //
     // Accept a stream of TransmissionStatuses sent while the optimal action
     // is waiting to be computed other TransmissionStatuses are recieved
-    rpc OptimizeCongestionControl(stream TransmissionStatus) returns (stream Action) {}
+    rpc OptimizeCongestionControl(stream Parameter) returns (stream Action) {}
 }
 
-// TransmissionStatuses are represented by a list of parameters that are 
-// going to be decided in further iterations the following is just a
-// placeholder
-message TransmissionStatus {
-    int64 cumulative_received_bytes = 1;
-    int64 cumulative_sent_bytes = 2;
-    int64 cumulative_sent_good_bytes = 3;
-    int64 current_window_size = 4;
-    int64 last_receive_time = 5;
-    int64 unack_bytes = 6;
-    int64 retransmissions = 7;
-    int64 chunk_rtt = 8;
-    int64 min_acknowledge_time = 9;
+message Parameter {
+    enum parameterType {
+        CHUNK_RTT_MICRO = 0;
+        MIN_ACK_TIME_MICRO = 1;
+        SENT_BYTES = 2;
+        RCV_BYTES = 3;
+        SENT_GOOD_BYTES = 4;
+        CURR_WINDOW_SIZE = 5;
+        UNACK_BYTES = 6;
+        RETRANSMISSIONS = 7;
+    }
+
+    int64 value = 1;
+    int64 timestamp = 2;
+    parameterType parameter_type = 3;
 }
 
 // Actions represent the CongestionWindow update to be performed
-// the following is meant to be just a placeholder
 message Action {
     int64 cwnd_update = 1;
 }
-
