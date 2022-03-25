@@ -20,8 +20,8 @@ class CongestionControlEnv(Env):
     def __init__(self,
                  episode_lenght: int = 1000,
                  eps: float = 0.05,
-                 num_actions: int = 6,
-                 observation_length: int = 20):
+                 num_actions: int = len(constants.ACTIONS),
+                 observation_length: int = len(Parameters)):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -68,7 +68,9 @@ class CongestionControlEnv(Env):
             while True:
                 logging.info("WARMUP - WAITING FIRST SENT..")
                 parameter = self._state_queue.get()
-                mpo.update_statistics(parameter)
+                mpo.update_statistics(parameter['value'],
+                                      parameter['timestamp'],
+                                      parameter['parameter_type'])
                 if mpo.current_statistics[Parameters.SENT_BYTES] > 0:
                     break
         self.state = np.array(
@@ -87,7 +89,9 @@ class CongestionControlEnv(Env):
         while True:
             logging.info("GETTING NEW PARAMS - WAITING REWARD REFLECTION...")
             parameter = self._state_queue.get()
-            mpo.update_statistics(parameter)
+            mpo.update_statistics(parameter['value'],
+                                  parameter['timestamp'],
+                                  parameter['parameter_type'])
 
             logging.debug(f"CURRENT STEP {self.current_step}")
             logging.debug(f"CWND BYTES {mpo.current_statistics[Parameters.CURR_WINDOW_SIZE]}")
