@@ -98,7 +98,8 @@ class CongestionControlEnv(Env):
             logging.debug(f"SET CWND BYTES"
                           f" {mpo.prev_stats_helper[Parameters.CURR_WINDOW_SIZE]}")
             if mpo.current_statistics[Parameters.CURR_WINDOW_SIZE] == mpo.prev_stats_helper[
-                Parameters.CURR_WINDOW_SIZE]:
+                Parameters.CURR_WINDOW_SIZE] or mpo.current_statistics[
+                Parameters.FINISHED]:
                 break
 
         reward = mpo.reward_function(mpo.current_statistics[Parameters.EMA_THROUGHPUT],
@@ -112,15 +113,22 @@ class CongestionControlEnv(Env):
         return reward
 
     def reset(self) -> GymObs:
+        if self.num_resets >= 0:
+            logging.info(f"COMPLETED EPISODE {self.num_resets} - RESETTING...")
+            mpo.current_statistics = dict((param, 0.0) for param in Parameters)
+            mpo.prev_stats_helper = dict((param, 0.0) for param in Parameters)
+            mpo.timestamps = dict((param, 0) for param in Parameters)
+
         self.current_step = 0
         self.num_resets += 1
+
         return self._next_observation()
 
     def step(self, action: np.ndarray) -> GymStepReturn:
         self._put_action(mpo.cwnd_update(action))
         self.current_step += 1
         reward = self._get_reward()
-        done = self.current_step >= self.episode_lenght
+        done = mpo.current_statistics[Parameters.FINISHED]
         return self._next_observation(), reward, done, {}
 
     def render(self, mode: str = "console") -> None:
