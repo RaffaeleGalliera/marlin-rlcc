@@ -41,6 +41,10 @@ class CongestionControlEnv(Env):
         self.current_step = 0
         self.num_resets = -1
         self.eps = eps
+
+        self.current_statistics = dict((param, 0.0) for param in Parameters)
+        self.stats_helper = dict((param, 0.0) for param in Parameters)
+        self.timestamps = dict((param, 0) for param in Parameters)
         # Run server in a different process
         self._server_process: Process
         self._run_server_process()
@@ -68,13 +72,16 @@ class CongestionControlEnv(Env):
             while True:
                 logging.info("WARMUP - WAITING FIRST SENT..")
                 parameter = self._state_queue.get()
-                mpo.update_statistics(parameter['value'],
+                mpo.update_statistics(self.current_statistics,
+                                      self.stats_helper,
+                                      self.timestamps,
+                                      parameter['value'],
                                       parameter['timestamp'],
                                       parameter['parameter_type'])
-                if mpo.current_statistics[Parameters.SENT_BYTES] > 0:
+                if self.current_statistics[Parameters.SENT_BYTES] > 0:
                     break
         self.state = np.array(
-            [mpo.current_statistics[x] for x in Parameters])
+            [self.current_statistics[x] for x in Parameters])
 
         return self.state
 
@@ -89,24 +96,27 @@ class CongestionControlEnv(Env):
         while True:
             logging.info("GETTING NEW PARAMS - WAITING REWARD REFLECTION...")
             parameter = self._state_queue.get()
-            mpo.update_statistics(parameter['value'],
+            mpo.update_statistics(self.current_statistics,
+                                  self.stats_helper,
+                                  self.timestamps,
+                                  parameter['value'],
                                   parameter['timestamp'],
                                   parameter['parameter_type'])
+        logging.debug(f"CURRENT STEP {self.current_step}")
+        logging.debug(f"CWND BYTES {self.current_statistics[Parameters.CURR_WINDOW_SIZE]}")
+        logging.debug(f"SET CWND BYTES"
+                      f" {self.stats_helper[Parameters.CURR_WINDOW_SIZE]}")
+        if self.current_statistics[Parameters.CURR_WINDOW_SIZE] == \
+                self.stats_helper[Parameters.CURR_WINDOW_SIZE] or mpo.current_statistics[Parameters.FINISHED]:
+            break
 
-            logging.debug(f"CURRENT STEP {self.current_step}")
-            logging.debug(f"CWND BYTES {mpo.current_statistics[Parameters.CURR_WINDOW_SIZE]}")
-            logging.debug(f"SET CWND BYTES"
-                          f" {mpo.prev_stats_helper[Parameters.CURR_WINDOW_SIZE]}")
-            if mpo.current_statistics[Parameters.CURR_WINDOW_SIZE] == mpo.prev_stats_helper[
-                Parameters.CURR_WINDOW_SIZE] or mpo.current_statistics[
-                Parameters.FINISHED]:
-                break
-
-        reward = mpo.reward_function(mpo.current_statistics[Parameters.EMA_THROUGHPUT],
-                                     mpo.current_statistics[Parameters.THROUGHPUT],
-                                     mpo.current_statistics[Parameters.LAST_RTT],
-                                     mpo.current_statistics[Parameters.VAR_RTT],
-                                     mpo.current_statistics[Parameters.MIN_RTT])
+        reward = mpo.reward_function(
+            self.current_statistics[Parameters.EMA_THROUGHPUT],
+            self.current_statistics[Parameters.THROUGHPUT],
+            self.current_statistics[Parameters.LAST_RTT],
+            self.current_statistics[Parameters.VAR_RTT],
+            self.current_statistics[Parameters.MIN_RTT]
+        )
 
         logging.info(f"REWARD PRODUCED: {reward}")
 
@@ -115,9 +125,9 @@ class CongestionControlEnv(Env):
     def reset(self) -> GymObs:
         if self.num_resets >= 0:
             logging.info(f"COMPLETED EPISODE {self.num_resets} - RESETTING...")
-            mpo.current_statistics = dict((param, 0.0) for param in Parameters)
-            mpo.prev_stats_helper = dict((param, 0.0) for param in Parameters)
-            mpo.timestamps = dict((param, 0) for param in Parameters)
+            self.current_statistics = dict((param, 0.0) for param in Parameters)
+            self.stats_helper = dict((param, 0.0) for param in Parameters)
+            self.timestamps = dict((param, 0) for param in Parameters)
 
         self.current_step = 0
         self.num_resets += 1
@@ -125,10 +135,13 @@ class CongestionControlEnv(Env):
         return self._next_observation()
 
     def step(self, action: np.ndarray) -> GymStepReturn:
-        self._put_action(mpo.cwnd_update(action))
+        self._put_action(mpo.cwnd_update(self.current_statistics,
+                                         self.stats_helper,
+                                         action)
+                         )
         self.current_step += 1
         reward = self._get_reward()
-        done = mpo.current_statistics[Parameters.FINISHED]
+        done = self.current_statistics[Parameters.FINISHED]
         return self._next_observation(), reward, done, {}
 
     def render(self, mode: str = "console") -> None:

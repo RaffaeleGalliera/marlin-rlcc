@@ -15,12 +15,6 @@ import numpy as np
 import statistics
 from constants import Parameters
 
-current_statistics = dict((param, 0.0) for param in Parameters)
-
-# Additional parameters to help with stats calculation
-prev_stats_helper = dict((param, 0.0) for param in Parameters)
-timestamps = dict((param, 0) for param in Parameters)
-
 
 # (2.2) When the first RTT measurement R is made, the host MUST set
 #
@@ -59,11 +53,11 @@ def ema_throughput(current_ema_throughput: float, current_throughput: float,
 
 
 # Mockets Congestion Window % action
-def cwnd_update(index) -> int:
+def cwnd_update(current_statistics, stats_helper, index) -> int:
     action = math.ceil(
         current_statistics[Parameters.CURR_WINDOW_SIZE] + current_statistics[
             Parameters.CURR_WINDOW_SIZE] * constants.ACTIONS[index])
-    prev_stats_helper[Parameters.CURR_WINDOW_SIZE] = action
+    stats_helper[Parameters.CURR_WINDOW_SIZE] = action
 
     logging.debug(f"AGENT - CURRENT CWND {current_statistics[Parameters.CURR_WINDOW_SIZE]} "
                   f"UPDATE WITH ACTION {constants.ACTIONS[index]} RETURNING "
@@ -82,7 +76,7 @@ def reward_function(current_ema_throughput, goodput, rtt, rtt_ema, rtt_min):
     return math.log(goodput/current_ema_throughput)
 
 
-def debug_stats_information():
+def debug_stats_information(current_statistics):
     logging.debug("\n".join(f"ENV STATS - {stat}: {value}" for stat, value in current_statistics.items()))
 
 
@@ -91,7 +85,12 @@ def min_excluding_zero(array_1, array_2):
     return np.min(arr[np.nonzero(arr)])
 
 
-def update_statistics(value, timestamp, param_type) -> None:
+def sent_bytes_in_timeframe(total_sent_bytes, previously_sent_byte):
+    return total_sent_bytes - previously_sent_byte
+
+
+def update_statistics(current_statistics, stats_helper, timestamps, value,
+                      timestamp, param_type) -> None:
     logging.debug(f"Received Parameter: {Parameters(param_type)} value "
                   f"{value} timestamp {timestamp}")
     # Param type is the int value associated to the enum
@@ -142,9 +141,11 @@ def update_statistics(value, timestamp, param_type) -> None:
         # Update params
         current_statistics[Parameters.SENT_BYTES] += value
         timestamps[Parameters.SENT_BYTES] = timestamp
-
-        current_statistics[Parameters.SENT_BYTES_TIMEFRAME] = \
-            current_statistics[Parameters.SENT_BYTES] - prev_stats_helper[Parameters.SENT_BYTES]
+        
+        current_statistics[Parameters.SENT_BYTES_TIMEFRAME] = sent_bytes_in_timeframe(
+            current_statistics[Parameters.SENT_BYTES],
+            stats_helper[Parameters.SENT_BYTES]
+        )
 
         if delta > 0:
             current_statistics[Parameters.THROUGHPUT] = throughput(
@@ -157,9 +158,9 @@ def update_statistics(value, timestamp, param_type) -> None:
                 alpha=constants.ALPHA
             )
 
-            prev_stats_helper[Parameters.SENT_BYTES] = current_statistics[Parameters.SENT_BYTES]
-            # Calc UNACK BYTES
-            current_statistics[Parameters.UNACK_BYTES] = current_statistics[Parameters.SENT_BYTES] - current_statistics[Parameters.SENT_GOOD_BYTES]
+        stats_helper[Parameters.SENT_BYTES] = current_statistics[Parameters.SENT_BYTES]
+        # Calc UNACK BYTES
+        current_statistics[Parameters.UNACK_BYTES] = current_statistics[Parameters.SENT_BYTES] - current_statistics[Parameters.SENT_GOOD_BYTES]
 
     # New ACKED bytes notification, UPDATE UNACK
     elif Parameters(param_type) is Parameters.SENT_GOOD_BYTES:
@@ -172,31 +173,26 @@ def update_statistics(value, timestamp, param_type) -> None:
         current_statistics[Parameters.SENT_GOOD_BYTES] += value
         timestamps[Parameters.SENT_GOOD_BYTES] = timestamp
 
-        current_statistics[Parameters.SENT_GOOD_BYTES_TIMEFRAME] = \
-            current_statistics[Parameters.SENT_GOOD_BYTES] - prev_stats_helper[Parameters.SENT_GOOD_BYTES]
-
+        current_statistics[
+            Parameters.SENT_GOOD_BYTES_TIMEFRAME] = sent_bytes_in_timeframe(
+            current_statistics[Parameters.SENT_GOOD_BYTES],
+            stats_helper[Parameters.SENT_GOOD_BYTES]
+        )
         if delta > 0:
             current_statistics[Parameters.GOODPUT] = throughput(
                 current_statistics[Parameters.SENT_GOOD_BYTES_TIMEFRAME],
                 delta
             )
 
-            prev_stats_helper[Parameters.SENT_GOOD_BYTES] = current_statistics[Parameters.SENT_GOOD_BYTES]
-            # Calc UNACK BYTES
-            current_statistics[Parameters.UNACK_BYTES] = current_statistics[Parameters.SENT_BYTES] - current_statistics[Parameters.SENT_GOOD_BYTES]
+        stats_helper[Parameters.SENT_GOOD_BYTES] = current_statistics[Parameters.SENT_GOOD_BYTES]
+        # Calc UNACK BYTES
+        current_statistics[Parameters.UNACK_BYTES] = current_statistics[Parameters.SENT_BYTES] - current_statistics[Parameters.SENT_GOOD_BYTES]
 
     elif Parameters(param_type) is Parameters.FINISHED:
         current_statistics[Parameters.FINISHED] = 1
 
-    # TODO: Does UNACK BYTES WORK?
-    # elif Parameters(param_type) is (Parameters.UNACK_BYTES or
-    #                                 Parameters.MIN_ACK_TIME_MICRO):
-    #     current_statistics[Parameters(param_type)] = value
-    #     timestamps[Parameters(param_type)] = timestamp
-
-    # RCV, Retransmissions
     else:
         current_statistics[Parameters(param_type)] += value
         timestamps[Parameters(param_type)] = timestamp
 
-    debug_stats_information()
+    debug_stats_information(current_statistics)
