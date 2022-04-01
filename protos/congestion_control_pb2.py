@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fprotos/congestion_control.proto\x12\x11\x63ongestioncontrol\"\xa0\x02\n\tParameter\x12\r\n\x05value\x18\x01 \x01(\x03\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x42\n\x0eparameter_type\x18\x03 \x01(\x0e\x32*.congestioncontrol.Parameter.parameterType\"\xac\x01\n\rparameterType\x12\x13\n\x0f\x43HUNK_RTT_MICRO\x10\x00\x12\x16\n\x12MIN_ACK_TIME_MICRO\x10\x01\x12\x0e\n\nSENT_BYTES\x10\x02\x12\r\n\tRCV_BYTES\x10\x03\x12\x13\n\x0fSENT_GOOD_BYTES\x10\x04\x12\x14\n\x10\x43URR_WINDOW_SIZE\x10\x05\x12\x0f\n\x0bUNACK_BYTES\x10\x06\x12\x13\n\x0fRETRANSMISSIONS\x10\x07\"\x1d\n\x06\x41\x63tion\x12\x13\n\x0b\x63wnd_update\x18\x01 \x01(\x03\x32o\n\x11\x43ongestionControl\x12Z\n\x19OptimizeCongestionControl\x12\x1c.congestioncontrol.Parameter\x1a\x19.congestioncontrol.Action\"\x00(\x01\x30\x01\x42\x1a\x42\x16\x43ongestionControlProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fprotos/congestion_control.proto\x12\x11\x63ongestioncontrol\"\xca\x02\n\tParameter\x12\r\n\x05value\x18\x01 \x01(\x03\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x42\n\x0eparameter_type\x18\x03 \x01(\x0e\x32*.congestioncontrol.Parameter.parameterType\"\xd6\x01\n\rparameterType\x12\x13\n\x0f\x43HUNK_RTT_MICRO\x10\x00\x12\x16\n\x12MIN_ACK_TIME_MICRO\x10\x01\x12\x0e\n\nSENT_BYTES\x10\x02\x12\r\n\tRCV_BYTES\x10\x03\x12\x13\n\x0fSENT_GOOD_BYTES\x10\x04\x12\x14\n\x10\x43URR_WINDOW_SIZE\x10\x05\x12\x0f\n\x0bUNACK_BYTES\x10\x06\x12\x13\n\x0fRETRANSMISSIONS\x10\x07\x12\x1a\n\x16\x43UMULATIVE_PACKET_LOSS\x10\x08\x12\x0c\n\x08\x46INISHED\x10\t\"\x1d\n\x06\x41\x63tion\x12\x13\n\x0b\x63wnd_update\x18\x01 \x01(\x03\x32o\n\x11\x43ongestionControl\x12Z\n\x19OptimizeCongestionControl\x12\x1c.congestioncontrol.Parameter\x1a\x19.congestioncontrol.Action\"\x00(\x01\x30\x01\x42\x1a\x42\x16\x43ongestionControlProtoP\x01\x62\x06proto3')
 
 
 
@@ -41,11 +41,11 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
   DESCRIPTOR._serialized_options = b'B\026CongestionControlProtoP\001'
   _PARAMETER._serialized_start=55
-  _PARAMETER._serialized_end=343
+  _PARAMETER._serialized_end=385
   _PARAMETER_PARAMETERTYPE._serialized_start=171
-  _PARAMETER_PARAMETERTYPE._serialized_end=343
-  _ACTION._serialized_start=345
-  _ACTION._serialized_end=374
-  _CONGESTIONCONTROL._serialized_start=376
-  _CONGESTIONCONTROL._serialized_end=487
+  _PARAMETER_PARAMETERTYPE._serialized_end=385
+  _ACTION._serialized_start=387
+  _ACTION._serialized_end=416
+  _CONGESTIONCONTROL._serialized_start=418
+  _CONGESTIONCONTROL._serialized_end=529
 # @@protoc_insertion_point(module_scope)

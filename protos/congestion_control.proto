@@ -24,6 +24,8 @@ message Parameter {
         CURR_WINDOW_SIZE = 5;
         UNACK_BYTES = 6;
         RETRANSMISSIONS = 7;
+        CUMULATIVE_PACKET_LOSS = 8;
+        FINISHED = 9;
     }
 
     int64 value = 1;
