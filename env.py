@@ -102,13 +102,15 @@ class CongestionControlEnv(Env):
                                   parameter['value'],
                                   parameter['timestamp'],
                                   parameter['parameter_type'])
-        logging.debug(f"CURRENT STEP {self.current_step}")
-        logging.debug(f"CWND BYTES {self.current_statistics[Parameters.CURR_WINDOW_SIZE]}")
-        logging.debug(f"SET CWND BYTES"
-                      f" {self.stats_helper[Parameters.CURR_WINDOW_SIZE]}")
-        if self.current_statistics[Parameters.CURR_WINDOW_SIZE] == \
-                self.stats_helper[Parameters.CURR_WINDOW_SIZE] or mpo.current_statistics[Parameters.FINISHED]:
-            break
+            logging.debug(f"CURRENT STEP {self.current_step}")
+            logging.debug(f"CWND BYTES {self.current_statistics[Parameters.CURR_WINDOW_SIZE]}")
+            logging.debug(f"SET CWND BYTES"
+                          f" {self.stats_helper[Parameters.CURR_WINDOW_SIZE]}")
+            if self.current_statistics[Parameters.CURR_WINDOW_SIZE] == (
+                    self.stats_helper[Parameters.CURR_WINDOW_SIZE] or
+                    self.current_statistics[Parameters.FINISHED]
+            ):
+                break
 
         reward = mpo.reward_function(
             self.current_statistics[Parameters.EMA_THROUGHPUT],
