@@ -34,7 +34,7 @@ class CongestionControlEnv(Env):
         self.episode_lenght = episode_lenght
 
         # Observation queue where the server will publish
-        self._state_queue = Queue(maxsize=1)
+        self._state_queue = Queue()
         # Action queue where the agent will publish the action
         self._action_queue = Queue(maxsize=1)
 

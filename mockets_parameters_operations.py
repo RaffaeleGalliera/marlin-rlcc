@@ -13,6 +13,7 @@ import constants
 import math
 import numpy as np
 import statistics
+import time
 from constants import Parameters
 
 
@@ -91,8 +92,6 @@ def sent_bytes_in_timeframe(total_sent_bytes, previously_sent_byte):
 
 def update_statistics(current_statistics, stats_helper, timestamps, value,
                       timestamp, param_type) -> None:
-    logging.debug(f"Received Parameter: {Parameters(param_type)} value "
-                  f"{value} timestamp {timestamp}")
     # Param type is the int value associated to the enum
     if Parameters(param_type) is Parameters.CURR_WINDOW_SIZE:
         current_statistics[Parameters.CURR_WINDOW_SIZE] = value

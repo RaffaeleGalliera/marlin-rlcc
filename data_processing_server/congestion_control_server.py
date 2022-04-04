@@ -41,20 +41,22 @@ class CongestionControlService(
                 'parameter_type': status.parameter_type,
                 'timestamp': status.timestamp
             }
-            await loop.run_in_executor(None, self._state_queue.put, parameter)
+
+            logging.debug(f"Received {status.timestamp} at time"
+                          f" {int(round(time.time() * 1000))}")
+
+            # Put in queue, note that queue is infinite aka doesn't block
+            self._state_queue.put(parameter)
 
             try:
-                action = await loop.run_in_executor(None,
-                                                    lambda:
-                                                    self._action_queue.get(
-                                                        block=False))
+                action = self._action_queue.get(block=False)
 
             except queue.Empty:
-                logging.debug("GRPC SERVER - Action not ready, continuing...")
+                logging.debug("GRPC SERVER - Action not ready, continuing ...")
                 pass
             else:
                 logging.debug(f"GRPC SERVER - Action ready, sending {action} "
-                              f"to "
+                              f"to " 
                               f"Mockets")
                 yield congestion_control_pb2.Action(cwnd_update=action)
 
