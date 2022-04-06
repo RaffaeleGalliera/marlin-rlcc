@@ -58,6 +58,11 @@ def cwnd_update(current_statistics, stats_helper, index) -> int:
     action = math.ceil(
         current_statistics[Parameters.CURR_WINDOW_SIZE] + current_statistics[
             Parameters.CURR_WINDOW_SIZE] * constants.ACTIONS[index])
+
+    if action > constants.CWND_UPPER_LIMIT:
+        logging.debug("REACHED WINDOW SIZE LIMIT")
+        return constants.CWND_UPPER_LIMIT
+
     stats_helper[Parameters.CURR_WINDOW_SIZE] = action
 
     logging.debug(f"AGENT - CURRENT CWND {current_statistics[Parameters.CURR_WINDOW_SIZE]} "
@@ -77,8 +82,10 @@ def reward_function(current_ema_throughput, goodput, rtt, rtt_ema, rtt_min):
     return math.log(goodput/current_ema_throughput)
 
 
-def debug_stats_information(current_statistics):
+def debug_stats_information(current_statistics, stats_helper):
     logging.debug("\n".join(f"ENV STATS - {stat}: {value}" for stat, value in current_statistics.items()))
+    logging.debug(f"CWND BYTES {current_statistics[Parameters.CURR_WINDOW_SIZE]}")
+    logging.debug(f"SET CWND BYTES {stats_helper[Parameters.CURR_WINDOW_SIZE]}")
 
 
 def min_excluding_zero(array_1, array_2):
@@ -91,7 +98,13 @@ def sent_bytes_in_timeframe(total_sent_bytes, previously_sent_byte):
 
 
 def update_statistics(current_statistics, stats_helper, timestamps, value,
-                      timestamp, param_type) -> None:
+                      timestamp, param_type) -> bool:
+    # Delta between the last two timestamps
+    delta = timestamp - timestamps[Parameters(param_type)]
+
+    if delta < 0:
+        return False
+
     # Param type is the int value associated to the enum
     if Parameters(param_type) is Parameters.CURR_WINDOW_SIZE:
         current_statistics[Parameters.CURR_WINDOW_SIZE] = value
@@ -130,13 +143,6 @@ def update_statistics(current_statistics, stats_helper, timestamps, value,
 
     # New Sent notification, UPDATE UNACK
     elif Parameters(param_type) is Parameters.SENT_BYTES:
-        # Delta between the last two sents
-        delta = timestamp - timestamps[Parameters.SENT_BYTES]
-        assert delta >= 0, f"Delta supposed to be positive, cannot have " \
-                             f"info " \
-                       f"from back in time...Got:" \
-                       f" {timestamp} - {timestamps[Parameters.SENT_BYTES]}"
-
         # Update params
         current_statistics[Parameters.SENT_BYTES] += value
         timestamps[Parameters.SENT_BYTES] = timestamp
@@ -146,6 +152,7 @@ def update_statistics(current_statistics, stats_helper, timestamps, value,
             stats_helper[Parameters.SENT_BYTES]
         )
 
+        # If sent bytes have same timestamp then we don't calc throughput
         if delta > 0:
             current_statistics[Parameters.THROUGHPUT] = throughput(
                 current_statistics[Parameters.SENT_BYTES_TIMEFRAME],
@@ -163,12 +170,6 @@ def update_statistics(current_statistics, stats_helper, timestamps, value,
 
     # New ACKED bytes notification, UPDATE UNACK
     elif Parameters(param_type) is Parameters.SENT_GOOD_BYTES:
-        delta = timestamp - timestamps[Parameters.SENT_GOOD_BYTES]
-        assert delta >= 0.0, f"Delta supposed to be positive, cannot have " \
-                             f"info " \
-                       f"from back in time...Got:" \
-                       f" {delta}"
-
         current_statistics[Parameters.SENT_GOOD_BYTES] += value
         timestamps[Parameters.SENT_GOOD_BYTES] = timestamp
 
@@ -177,6 +178,8 @@ def update_statistics(current_statistics, stats_helper, timestamps, value,
             current_statistics[Parameters.SENT_GOOD_BYTES],
             stats_helper[Parameters.SENT_GOOD_BYTES]
         )
+
+        # If sent bytes have same timestamp then we don't calc throughput
         if delta > 0:
             current_statistics[Parameters.GOODPUT] = throughput(
                 current_statistics[Parameters.SENT_GOOD_BYTES_TIMEFRAME],
@@ -194,4 +197,6 @@ def update_statistics(current_statistics, stats_helper, timestamps, value,
         current_statistics[Parameters(param_type)] += value
         timestamps[Parameters(param_type)] = timestamp
 
-    debug_stats_information(current_statistics)
+    debug_stats_information(current_statistics, stats_helper)
+
+    return True
