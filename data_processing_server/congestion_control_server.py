@@ -32,6 +32,8 @@ class CongestionControlService(congestion_control_pb2_grpc.
 
         parameter = dict()
         async for status in request_iterator:
+            logging.info(f"DELAY SERVER ACTION RECEIVED "
+                         f"{time.time() * 1000 - status.timestamp}")
             # Run the I/O blocking Queue communication with Marlin
             # Environment in a different thread and wait for response
             loop = asyncio.get_event_loop()

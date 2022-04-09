@@ -16,7 +16,7 @@ from constants import Parameters, State
 logging.basicConfig(level=logging.INFO)
 
 
-def _delta_timestamp_ms(timestamp_2, timestamp_1):
+def _delta_timestamp_micro(timestamp_2, timestamp_1):
     return (timestamp_2 - timestamp_1) * 1000
 
 
@@ -52,6 +52,7 @@ class CongestionControlEnv(Env):
         self.current_statistics = dict((param, 0.0) for param in Parameters)
         self.stats_helper = dict((param, 0.0) for param in Parameters)
         self.timestamps = dict((param, 0) for param in Parameters)
+        self.counter = dict((param, 0) for param in Parameters)
         # Run server in a different process
         self._server_process: Process
         self._run_server_process()
@@ -75,7 +76,7 @@ class CongestionControlEnv(Env):
 
     def _check_cwnd_coherency_and_wait_srtt_ms(self, timestamp):
         return self.current_statistics[Parameters.CURR_WINDOW_SIZE] == self.stats_helper[Parameters.CURR_WINDOW_SIZE] \
-               and _delta_timestamp_ms(timestamp, self.timestamps[Parameters.CURR_WINDOW_SIZE]) > self.current_statistics[Parameters.SRTT]
+               and _delta_timestamp_micro(timestamp, self.timestamps[Parameters.CURR_WINDOW_SIZE]) > self.current_statistics[Parameters.SRTT]
 
     def _check_detected_sent_bytes_and_cwnd(self):
         return (self.current_statistics[Parameters.SENT_BYTES] and
@@ -88,6 +89,7 @@ class CongestionControlEnv(Env):
                                                  self.timestamps,
                                                  parameter['value'],
                                                  parameter['timestamp'],
+                                                 self.counter,
                                                  parameter['parameter_type'])
 
         if not is_message_valid:
@@ -115,15 +117,19 @@ class CongestionControlEnv(Env):
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
+        counter = 0
         while True:
             logging.debug("GETTING NEW PARAMS - WAITING REWARD REFLECTION...")
             timestamp = self._fetch_param_and_update_stats()
-
+            counter += 1
             if self.current_statistics[Parameters.FINISHED] or self._check_cwnd_coherency_and_wait_srtt_ms(timestamp):
                 break
 
-        logging.debug(f"Reflection passed with delta: "
-                      f"{(timestamp - self.timestamps[Parameters.CURR_WINDOW_SIZE])}")
+        logging.info(f"Reflection passed - "
+                     f"Delay: {time.time()* 1000 - timestamp} "
+                     f"State Queue: {self._state_queue.qsize()} "
+                     f"Action Queue: {self._action_queue.qsize()} "
+                     f"Processed messages: {counter}")
 
         reward = mpo.reward_function(
             self.current_statistics[Parameters.EMA_THROUGHPUT],
@@ -148,14 +154,16 @@ class CongestionControlEnv(Env):
         logging.info(f"Time taken: {time.time() - self.timer}")
         logging.info(f"EMA THROUGHPUT: "
                      f"{self.current_statistics[Parameters.EMA_THROUGHPUT]}")
+        logging.info(f"COUNTER SUMMARY: {self.counter}")
 
     def reset(self) -> GymObs:
-        if self.num_resets >= 0:
-            self.report()
+        # if self.num_resets >= 0:
+        self.report()
 
         self.current_statistics = dict((param, 0.0) for param in Parameters)
         self.stats_helper = dict((param, 0.0) for param in Parameters)
         self.timestamps = dict((param, 0) for param in Parameters)
+        self.counter = dict((param, 0) for param in Parameters)
 
         self.received_params = 0
         self.current_step = 0
