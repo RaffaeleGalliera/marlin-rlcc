@@ -4,7 +4,7 @@ from env import CongestionControlEnv
 
 if __name__ == "__main__":
     A2C('MlpPolicy',
-        CongestionControlEnv(),
+        CongestionControlEnv(total_timesteps=5000),
         verbose=1,
         tensorboard_log="./a2c_test/").learn(total_timesteps=5000,
                                              tb_log_name='first_run')

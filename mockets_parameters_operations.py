@@ -37,8 +37,8 @@ def rtt_var(current_srtt: float, current_rtt_var: float, rtt: float,
     return rtt / 2 if current_rtt_var == 0.0 else (1 - beta) * current_rtt_var + beta * abs(current_srtt - rtt)
 
 
-def writable_bytes(cwnd: float, inflight_bytes: float) -> float:
-    return cwnd - inflight_bytes
+def writable_bytes(cwnd: float, inflight_bytes: float, lrtt: float) -> float:
+    return cwnd/lrtt*1000 - inflight_bytes
 
 
 def throughput(sent_bytes: float, delta: int) -> float:
@@ -60,7 +60,7 @@ def cwnd_update(current_statistics, stats_helper, index) -> int:
             Parameters.CURR_WINDOW_SIZE] * constants.ACTIONS[index])
 
     if action > constants.CWND_UPPER_LIMIT:
-        logging.debug("REACHED WINDOW SIZE LIMIT")
+        logging.info("REACHED WINDOW SIZE LIMIT")
         return constants.CWND_UPPER_LIMIT
 
     stats_helper[Parameters.CURR_WINDOW_SIZE] = action
@@ -82,7 +82,7 @@ def reward_function(current_ema_throughput, goodput, rtt, rtt_ema, rtt_min):
     return math.log(goodput/current_ema_throughput)
 
 
-def debug_stats_information(current_statistics, stats_helper):
+def debug_stats_information(current_statistics, stats_helper, timestamp):
     logging.debug("\n".join(f"ENV STATS - {stat}: {value}" for stat, value in current_statistics.items()))
     logging.debug(f"CWND BYTES {current_statistics[Parameters.CURR_WINDOW_SIZE]}")
     logging.debug(f"SET CWND BYTES {stats_helper[Parameters.CURR_WINDOW_SIZE]}")
@@ -98,10 +98,10 @@ def sent_bytes_in_timeframe(total_sent_bytes, previously_sent_byte):
 
 
 def update_statistics(current_statistics, stats_helper, timestamps, value,
-                      timestamp, param_type) -> bool:
+                      timestamp, counter, param_type) -> bool:
     # Delta between the last two timestamps
     delta = timestamp - timestamps[Parameters(param_type)]
-
+    counter[Parameters(param_type)] += 1
     if delta < 0:
         return False
 
@@ -110,9 +110,12 @@ def update_statistics(current_statistics, stats_helper, timestamps, value,
         current_statistics[Parameters.CURR_WINDOW_SIZE] = value
         timestamps[Parameters.CURR_WINDOW_SIZE] = timestamp
 
-        current_statistics[Parameters.WRITABLE_BYTES] = writable_bytes(
-            current_statistics[Parameters.CURR_WINDOW_SIZE],
-            current_statistics[Parameters.UNACK_BYTES])
+        if current_statistics[Parameters.LAST_RTT] > 0:
+            current_statistics[Parameters.WRITABLE_BYTES] = writable_bytes(
+                current_statistics[Parameters.CURR_WINDOW_SIZE],
+                current_statistics[Parameters.UNACK_BYTES],
+                current_statistics[Parameters.LAST_RTT]
+            )
 
     elif Parameters(param_type) is Parameters.CHUNK_RTT_MICRO:
         current_statistics[Parameters.CHUNK_RTT_MICRO] = value
@@ -197,6 +200,6 @@ def update_statistics(current_statistics, stats_helper, timestamps, value,
         current_statistics[Parameters(param_type)] += value
         timestamps[Parameters(param_type)] = timestamp
 
-    debug_stats_information(current_statistics, stats_helper)
+    debug_stats_information(current_statistics, stats_helper, timestamp)
 
     return True
