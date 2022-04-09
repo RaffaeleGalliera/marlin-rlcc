@@ -14,8 +14,8 @@ from protos import congestion_control_pb2, congestion_control_pb2_grpc
 from multiprocessing import Queue
 
 
-class CongestionControlService(
-    congestion_control_pb2_grpc.CongestionControlServicer):
+class CongestionControlService(congestion_control_pb2_grpc.
+                               CongestionControlServicer):
     """Implements methods for Communication during the Congestion Control"""
 
     def __init__(self, action_queue: Queue, state_queue: Queue):
@@ -28,10 +28,12 @@ class CongestionControlService(
                                         request_iterator: AsyncIterable[
                                             congestion_control_pb2.Parameter],
                                         unused_context) -> AsyncIterable[
-        congestion_control_pb2.Action]:
+                                            congestion_control_pb2.Action]:
 
         parameter = dict()
         async for status in request_iterator:
+            logging.info(f"DELAY SERVER ACTION RECEIVED "
+                         f"{time.time() * 1000 - status.timestamp}")
             # Run the I/O blocking Queue communication with Marlin
             # Environment in a different thread and wait for response
             loop = asyncio.get_event_loop()
@@ -41,9 +43,6 @@ class CongestionControlService(
                 'parameter_type': status.parameter_type,
                 'timestamp': status.timestamp
             }
-
-            logging.debug(f"Received {status.timestamp} at time"
-                          f" {int(round(time.time() * 1000))}")
 
             # Put in queue, note that queue is infinite aka doesn't block
             self._state_queue.put(parameter)
@@ -56,8 +55,7 @@ class CongestionControlService(
                 pass
             else:
                 logging.debug(f"GRPC SERVER - Action ready, sending {action} "
-                              f"to " 
-                              f"Mockets")
+                              f"to Mockets")
                 yield congestion_control_pb2.Action(cwnd_update=action)
 
 
