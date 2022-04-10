@@ -3,7 +3,6 @@
 # source: protos/congestion_control.proto
 """Generated protocol buffer code."""
 from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import message as _message
 from google.protobuf import reflection as _reflection
 from google.protobuf import symbol_database as _symbol_database
@@ -14,13 +13,167 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fprotos/congestion_control.proto\x12\x11\x63ongestioncontrol\"\xca\x02\n\tParameter\x12\r\n\x05value\x18\x01 \x01(\x03\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x42\n\x0eparameter_type\x18\x03 \x01(\x0e\x32*.congestioncontrol.Parameter.parameterType\"\xd6\x01\n\rparameterType\x12\x13\n\x0f\x43HUNK_RTT_MICRO\x10\x00\x12\x16\n\x12MIN_ACK_TIME_MICRO\x10\x01\x12\x0e\n\nSENT_BYTES\x10\x02\x12\r\n\tRCV_BYTES\x10\x03\x12\x13\n\x0fSENT_GOOD_BYTES\x10\x04\x12\x14\n\x10\x43URR_WINDOW_SIZE\x10\x05\x12\x0f\n\x0bUNACK_BYTES\x10\x06\x12\x13\n\x0fRETRANSMISSIONS\x10\x07\x12\x1a\n\x16\x43UMULATIVE_PACKET_LOSS\x10\x08\x12\x0c\n\x08\x46INISHED\x10\t\"\x1d\n\x06\x41\x63tion\x12\x13\n\x0b\x63wnd_update\x18\x01 \x01(\x03\x32o\n\x11\x43ongestionControl\x12Z\n\x19OptimizeCongestionControl\x12\x1c.congestioncontrol.Parameter\x1a\x19.congestioncontrol.Action\"\x00(\x01\x30\x01\x42\x1a\x42\x16\x43ongestionControlProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor.FileDescriptor(
+  name='protos/congestion_control.proto',
+  package='congestioncontrol',
+  syntax='proto3',
+  serialized_options=b'B\026CongestionControlProtoP\001',
+  create_key=_descriptor._internal_create_key,
+  serialized_pb=b'\n\x1fprotos/congestion_control.proto\x12\x11\x63ongestioncontrol\"\xca\x02\n\tParameter\x12\r\n\x05value\x18\x01 \x01(\x03\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x42\n\x0eparameter_type\x18\x03 \x01(\x0e\x32*.congestioncontrol.Parameter.parameterType\"\xd6\x01\n\rparameterType\x12\x13\n\x0f\x43HUNK_RTT_MICRO\x10\x00\x12\x16\n\x12MIN_ACK_TIME_MICRO\x10\x01\x12\x0e\n\nSENT_BYTES\x10\x02\x12\r\n\tRCV_BYTES\x10\x03\x12\x13\n\x0fSENT_GOOD_BYTES\x10\x04\x12\x14\n\x10\x43URR_WINDOW_SIZE\x10\x05\x12\x0f\n\x0bUNACK_BYTES\x10\x06\x12\x13\n\x0fRETRANSMISSIONS\x10\x07\x12\x1a\n\x16\x43UMULATIVE_PACKET_LOSS\x10\x08\x12\x0c\n\x08\x46INISHED\x10\t\"\x1d\n\x06\x41\x63tion\x12\x13\n\x0b\x63wnd_update\x18\x01 \x01(\x03\x32k\n\x11\x43ongestionControl\x12V\n\x19OptimizeCongestionControl\x12\x1c.congestioncontrol.Parameter\x1a\x19.congestioncontrol.Action\"\x00\x42\x1a\x42\x16\x43ongestionControlProtoP\x01\x62\x06proto3'
+)
 
 
 
-_PARAMETER = DESCRIPTOR.message_types_by_name['Parameter']
-_ACTION = DESCRIPTOR.message_types_by_name['Action']
-_PARAMETER_PARAMETERTYPE = _PARAMETER.enum_types_by_name['parameterType']
+_PARAMETER_PARAMETERTYPE = _descriptor.EnumDescriptor(
+  name='parameterType',
+  full_name='congestioncontrol.Parameter.parameterType',
+  filename=None,
+  file=DESCRIPTOR,
+  create_key=_descriptor._internal_create_key,
+  values=[
+    _descriptor.EnumValueDescriptor(
+      name='CHUNK_RTT_MICRO', index=0, number=0,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='MIN_ACK_TIME_MICRO', index=1, number=1,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='SENT_BYTES', index=2, number=2,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='RCV_BYTES', index=3, number=3,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='SENT_GOOD_BYTES', index=4, number=4,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='CURR_WINDOW_SIZE', index=5, number=5,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='UNACK_BYTES', index=6, number=6,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='RETRANSMISSIONS', index=7, number=7,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='CUMULATIVE_PACKET_LOSS', index=8, number=8,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='FINISHED', index=9, number=9,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+  ],
+  containing_type=None,
+  serialized_options=None,
+  serialized_start=171,
+  serialized_end=385,
+)
+_sym_db.RegisterEnumDescriptor(_PARAMETER_PARAMETERTYPE)
+
+
+_PARAMETER = _descriptor.Descriptor(
+  name='Parameter',
+  full_name='congestioncontrol.Parameter',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='value', full_name='congestioncontrol.Parameter.value', index=0,
+      number=1, type=3, cpp_type=2, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='timestamp', full_name='congestioncontrol.Parameter.timestamp', index=1,
+      number=2, type=3, cpp_type=2, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='parameter_type', full_name='congestioncontrol.Parameter.parameter_type', index=2,
+      number=3, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+    _PARAMETER_PARAMETERTYPE,
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=55,
+  serialized_end=385,
+)
+
+
+_ACTION = _descriptor.Descriptor(
+  name='Action',
+  full_name='congestioncontrol.Action',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='cwnd_update', full_name='congestioncontrol.Action.cwnd_update', index=0,
+      number=1, type=3, cpp_type=2, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=387,
+  serialized_end=416,
+)
+
+_PARAMETER.fields_by_name['parameter_type'].enum_type = _PARAMETER_PARAMETERTYPE
+_PARAMETER_PARAMETERTYPE.containing_type = _PARAMETER
+DESCRIPTOR.message_types_by_name['Parameter'] = _PARAMETER
+DESCRIPTOR.message_types_by_name['Action'] = _ACTION
+_sym_db.RegisterFileDescriptor(DESCRIPTOR)
+
 Parameter = _reflection.GeneratedProtocolMessageType('Parameter', (_message.Message,), {
   'DESCRIPTOR' : _PARAMETER,
   '__module__' : 'protos.congestion_control_pb2'
@@ -35,17 +188,32 @@ Action = _reflection.GeneratedProtocolMessageType('Action', (_message.Message,),
   })
 _sym_db.RegisterMessage(Action)
 
-_CONGESTIONCONTROL = DESCRIPTOR.services_by_name['CongestionControl']
-if _descriptor._USE_C_DESCRIPTORS == False:
 
-  DESCRIPTOR._options = None
-  DESCRIPTOR._serialized_options = b'B\026CongestionControlProtoP\001'
-  _PARAMETER._serialized_start=55
-  _PARAMETER._serialized_end=385
-  _PARAMETER_PARAMETERTYPE._serialized_start=171
-  _PARAMETER_PARAMETERTYPE._serialized_end=385
-  _ACTION._serialized_start=387
-  _ACTION._serialized_end=416
-  _CONGESTIONCONTROL._serialized_start=418
-  _CONGESTIONCONTROL._serialized_end=529
+DESCRIPTOR._options = None
+
+_CONGESTIONCONTROL = _descriptor.ServiceDescriptor(
+  name='CongestionControl',
+  full_name='congestioncontrol.CongestionControl',
+  file=DESCRIPTOR,
+  index=0,
+  serialized_options=None,
+  create_key=_descriptor._internal_create_key,
+  serialized_start=418,
+  serialized_end=525,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='OptimizeCongestionControl',
+    full_name='congestioncontrol.CongestionControl.OptimizeCongestionControl',
+    index=0,
+    containing_service=None,
+    input_type=_PARAMETER,
+    output_type=_ACTION,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_CONGESTIONCONTROL)
+
+DESCRIPTOR.services_by_name['CongestionControl'] = _CONGESTIONCONTROL
+
 # @@protoc_insertion_point(module_scope)

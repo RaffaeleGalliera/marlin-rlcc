@@ -24,39 +24,35 @@ class CongestionControlService(congestion_control_pb2_grpc.
 
     # Main async coroutine for Bidirectional CongestionControl communication
     # with JMockets
-    async def OptimizeCongestionControl(self,
-                                        request_iterator: AsyncIterable[
-                                            congestion_control_pb2.Parameter],
-                                        unused_context) -> AsyncIterable[
-                                            congestion_control_pb2.Action]:
+    def OptimizeCongestionControl(self,
+                                  status: congestion_control_pb2.Parameter,
+                                  unused_context) -> congestion_control_pb2.Action:
 
         parameter = dict()
-        async for status in request_iterator:
-            logging.info(f"DELAY SERVER ACTION RECEIVED "
-                         f"{time.time() * 1000 - status.timestamp}")
-            # Run the I/O blocking Queue communication with Marlin
-            # Environment in a different thread and wait for response
-            loop = asyncio.get_event_loop()
-            logging.debug("GRPC SERVER - Sending message...")
-            parameter = {
-                'value': status.value,
-                'parameter_type': status.parameter_type,
-                'timestamp': status.timestamp
-            }
+        logging.info(f"DELAY SERVER ACTION RECEIVED "
+                     f"{time.time() * 1000 - status.timestamp}")
+        # Run the I/O blocking Queue communication with Marlin
+        # Environment in a different thread and wait for response
+        logging.debug("GRPC SERVER - Sending message...")
+        parameter = {
+            'value': status.value,
+            'parameter_type': status.parameter_type,
+            'timestamp': status.timestamp
+        }
 
-            # Put in queue, note that queue is infinite aka doesn't block
-            self._state_queue.put(parameter)
+        # Put in queue, note that queue is infinite aka doesn't block
+        self._state_queue.put(parameter)
 
-            try:
-                action = self._action_queue.get(block=False)
+        try:
+            action = self._action_queue.get(block=False)
 
-            except queue.Empty:
-                logging.debug("GRPC SERVER - Action not ready, continuing ...")
-                pass
-            else:
-                logging.debug(f"GRPC SERVER - Action ready, sending {action} "
-                              f"to Mockets")
-                yield congestion_control_pb2.Action(cwnd_update=action)
+        except queue.Empty:
+            logging.debug("GRPC SERVER - Action not ready, continuing ...")
+            return congestion_control_pb2.Action(cwnd_update=-1)
+        else:
+            logging.debug(f"GRPC SERVER - Action ready, sending {action} "
+                          f"to Mockets")
+            return congestion_control_pb2.Action(cwnd_update=action)
 
 
 async def serve(action_queue: Queue, state_queue: Queue) -> None:

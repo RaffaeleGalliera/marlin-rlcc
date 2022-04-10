@@ -15,7 +15,7 @@ class CongestionControlStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.OptimizeCongestionControl = channel.stream_stream(
+        self.OptimizeCongestionControl = channel.unary_unary(
                 '/congestioncontrol.CongestionControl/OptimizeCongestionControl',
                 request_serializer=protos_dot_congestion__control__pb2.Parameter.SerializeToString,
                 response_deserializer=protos_dot_congestion__control__pb2.Action.FromString,
@@ -26,7 +26,7 @@ class CongestionControlServicer(object):
     """Interface exported by the server
     """
 
-    def OptimizeCongestionControl(self, request_iterator, context):
+    def OptimizeCongestionControl(self, request, context):
         """Define a Bidirectional streaming
 
         Accept a stream of TransmissionStatuses sent while the optimal action
@@ -39,7 +39,7 @@ class CongestionControlServicer(object):
 
 def add_CongestionControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'OptimizeCongestionControl': grpc.stream_stream_rpc_method_handler(
+            'OptimizeCongestionControl': grpc.unary_unary_rpc_method_handler(
                     servicer.OptimizeCongestionControl,
                     request_deserializer=protos_dot_congestion__control__pb2.Parameter.FromString,
                     response_serializer=protos_dot_congestion__control__pb2.Action.SerializeToString,
@@ -56,7 +56,7 @@ class CongestionControl(object):
     """
 
     @staticmethod
-    def OptimizeCongestionControl(request_iterator,
+    def OptimizeCongestionControl(request,
             target,
             options=(),
             channel_credentials=None,
@@ -66,7 +66,7 @@ class CongestionControl(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/congestioncontrol.CongestionControl/OptimizeCongestionControl',
+        return grpc.experimental.unary_unary(request, target, '/congestioncontrol.CongestionControl/OptimizeCongestionControl',
             protos_dot_congestion__control__pb2.Parameter.SerializeToString,
             protos_dot_congestion__control__pb2.Action.FromString,
             options, channel_credentials,

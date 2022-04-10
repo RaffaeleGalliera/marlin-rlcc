@@ -11,7 +11,7 @@ service CongestionControl {
     //
     // Accept a stream of TransmissionStatuses sent while the optimal action
     // is waiting to be computed other TransmissionStatuses are recieved
-    rpc OptimizeCongestionControl(stream Parameter) returns (stream Action) {}
+    rpc OptimizeCongestionControl(Parameter) returns (Action) {}
 }
 
 message Parameter {
