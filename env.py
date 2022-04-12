@@ -9,7 +9,6 @@ from gym.spaces import Box, Discrete
 from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 
 import data_processing_server.congestion_control_server as cc_server
-import mockets_parameters_operations as mpo
 import constants
 import math
 from constants import Parameters, State
@@ -56,12 +55,10 @@ class CongestionControlEnv(Env):
         self.total_steps = 0
         self.num_resets = -1
         self.total_timesteps = total_timesteps
-        self.older_messages = 0
         self.episode_return = 0
         self.timer = 0
 
         self.previous_timestamp = 0
-        self.received_params = 0
         self.current_statistics = dict((param, 0.0) for param in Parameters)
         # Run server in a different process
         self._server_process: Process
@@ -120,16 +117,19 @@ class CongestionControlEnv(Env):
         return self.current_statistics[Parameters.TIMESTAMP]
 
     def _get_state(self) -> np.array:
-        logging.info("FEEDING STATE..")
+        logging.info("FETCHING STATE..")
 
-        timestamp = self._fetch_param_and_update_stats()
-        self._process_missing_params()
-        self.previous_timestamp = timestamp
+        if not self.current_statistics[Parameters.FINISHED]:
+            timestamp = self._fetch_param_and_update_stats()
+            self._process_missing_params()
+            self.previous_timestamp = timestamp
 
-        logging.info(f"STATE FED WITH DELAY - "
-                     f"{time.time() * 1000 - timestamp}ms")
+            logging.info(f"STATE RECEIVED WITH DELAY: "
+                         f"{time.time() * 1000 - timestamp}ms")
 
-        logging.info(f"STATE: {self.current_statistics}")
+            logging.info(f"STATE: {self.current_statistics}")
+        else:
+            logging.info("SKIPPING STATE FETCH")
 
         self.state = np.array([self.current_statistics[Parameters(x.value)]
                                for x in
@@ -160,7 +160,8 @@ class CongestionControlEnv(Env):
         )
 
         logging.info(f"REWARD PRODUCED: {reward} after "
-                     f"{time.time()*1000 - self.previous_timestamp}ms")
+                     f"{time.time()*1000 - self.previous_timestamp}ms from "
+                     f"received the action")
         self.episode_return += reward
 
         return reward
@@ -179,7 +180,6 @@ class CongestionControlEnv(Env):
         logging.info(f"Steps taken in episode: {self.current_step}")
         logging.info(f"Total steps until training completion: "
                      f"{self.total_timesteps - self.total_steps}")
-        logging.info(f"Old messages detected in episode: {self.older_messages}")
         logging.info(f"Return accumulated: {self.episode_return}")
         logging.info(f"Time taken: {time.time() - self.timer}")
         logging.info(f"EMA THROUGHPUT: "
@@ -191,10 +191,8 @@ class CongestionControlEnv(Env):
 
         self.current_statistics = dict((param, 0.0) for param in Parameters)
 
-        self.received_params = 0
         self.current_step = 0
         self.num_resets += 1
-        self.older_messages = 0
         self.episode_return = 0
         self.timer = time.time()
 
@@ -202,10 +200,12 @@ class CongestionControlEnv(Env):
 
     def step(self, action: np.ndarray) -> GymStepReturn:
         self._put_action(self._cwnd_update(action))
+        reward = self._get_reward()
+
         self.current_step += 1
         self.total_steps += 1
-        reward = self._get_reward()
-        done = self.current_statistics[Parameters.FINISHED]
+
+        done = True if self.current_statistics[Parameters.FINISHED] else False
         return self._next_observation(), reward, done, {}
 
     def render(self, mode: str = "console") -> None:
