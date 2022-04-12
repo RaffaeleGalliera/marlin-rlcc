@@ -6,50 +6,66 @@ from enum import Enum
 
 class Parameters(Enum):
     # From Mockets
-    CHUNK_RTT_MICRO = 0
-    MIN_ACK_TIME_MICRO = 1
+    CURR_WINDOW_SIZE = 1
+
     SENT_BYTES = 2
     RCV_BYTES = 3
     SENT_GOOD_BYTES = 4
-    CURR_WINDOW_SIZE = 5
-    UNACK_BYTES = 6
-    RETRANSMISSIONS = 7
-    CUMULATIVE_PACKET_LOSS = 8
-    FINISHED = 9
-    # Other Params
+    SENT_BYTES_TIMEFRAME = 5
+    SENT_GOOD_BYTES_TIMEFRAME = 6
+
+    UNACK_BYTES = 7
+    RETRANSMISSIONS = 8
+    CUMULATIVE_PACKET_LOSS = 9
     WRITABLE_BYTES = 10
-    SENT_BYTES_TIMEFRAME = 11
-    SENT_GOOD_BYTES_TIMEFRAME = 12
-    THROUGHPUT = 13
-    GOODPUT = 14
-    EMA_THROUGHPUT = 15
-    LAST_RTT = 16
-    MIN_RTT = 17
-    MAX_RTT = 18
-    SRTT = 19
-    VAR_RTT = 20
+
+    # Other Params
+
+    THROUGHPUT = 11
+    GOODPUT = 12
+    EMA_THROUGHPUT = 13
+    EMA_GOODPUT= 14
+
+    LAST_RTT = 15
+    MIN_RTT = 16
+    MAX_RTT = 17
+    SRTT = 18
+    VAR_RTT = 19
+
+    TIMESTAMP = 20
+    FINISHED = 21
 
 
 class State(Enum):
-    CHUNK_RTT_MICRO = 0
+    # From Mockets
+    CURR_WINDOW_SIZE = 1
+
     SENT_BYTES = 2
     RCV_BYTES = 3
     SENT_GOOD_BYTES = 4
-    CURR_WINDOW_SIZE = 5
-    UNACK_BYTES = 6
-    RETRANSMISSIONS = 7
-    CUMULATIVE_PACKET_LOSS = 8
+    SENT_BYTES_TIMEFRAME = 5
+    SENT_GOOD_BYTES_TIMEFRAME = 6
+
+    UNACK_BYTES = 7
+    RETRANSMISSIONS = 8
+    CUMULATIVE_PACKET_LOSS = 9
     WRITABLE_BYTES = 10
-    SENT_BYTES_TIMEFRAME = 11
-    SENT_GOOD_BYTES_TIMEFRAME = 12
-    THROUGHPUT = 13
-    GOODPUT = 14
-    EMA_THROUGHPUT = 15
-    LAST_RTT = 16
-    MIN_RTT = 17
-    MAX_RTT = 18
-    SRTT = 19
-    VAR_RTT = 20
+
+    # Other Params
+
+    THROUGHPUT = 11
+    GOODPUT = 12
+    EMA_THROUGHPUT = 13
+    EMA_GOODPUT = 14
+
+    LAST_RTT = 15
+    MIN_RTT = 16
+    MAX_RTT = 17
+    SRTT = 18
+    VAR_RTT = 19
+
+    FINISHED = 21
+
 
 # TODO: 'rtt_standing',  # Min RTT over
 # win of size

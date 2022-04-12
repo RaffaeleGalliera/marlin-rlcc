@@ -16,7 +16,7 @@ import statistics
 import time
 from constants import Parameters
 
-
+#
 # (2.2) When the first RTT measurement R is made, the host MUST set
 #
 #             SRTT <- R

@@ -11,6 +11,7 @@ from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 import data_processing_server.congestion_control_server as cc_server
 import mockets_parameters_operations as mpo
 import constants
+import math
 from constants import Parameters, State
 
 logging.basicConfig(level=logging.INFO)
@@ -50,9 +51,6 @@ class CongestionControlEnv(Env):
         self.received_params = 0
 
         self.current_statistics = dict((param, 0.0) for param in Parameters)
-        self.stats_helper = dict((param, 0.0) for param in Parameters)
-        self.timestamps = dict((param, 0) for param in Parameters)
-        self.counter = dict((param, 0) for param in Parameters)
         # Run server in a different process
         self._server_process: Process
         self._run_server_process()
@@ -83,26 +81,15 @@ class CongestionControlEnv(Env):
                 self.current_statistics[Parameters.CURR_WINDOW_SIZE]) == constants.STARTING_WINDOW_SIZE
 
     def _fetch_param_and_update_stats(self) -> int:
-        parameter = self._state_queue.get()
-        is_message_valid = mpo.update_statistics(self.current_statistics,
-                                                 self.stats_helper,
-                                                 self.timestamps,
-                                                 parameter['value'],
-                                                 parameter['timestamp'],
-                                                 self.counter,
-                                                 parameter['parameter_type'])
+        self.current_statistics = self._state_queue.get()
+        logging.info(f"STATE: {self.current_statistics}")
 
-        if not is_message_valid:
-            self.older_messages += 1
-
-        return parameter['timestamp']
+        return self.current_statistics[Parameters.TIMESTAMP]
 
     def _get_state(self) -> np.array:
-        logging.debug("FEEDING STATE..")
+        logging.info("FEEDING STATE..")
 
-        # Wait until CWND > 0 or Sent bytes detected if step 0
-        while self.current_step == 0 and not self._check_detected_sent_bytes_and_cwnd():
-            _ = self._fetch_param_and_update_stats()
+        timestamp = self._fetch_param_and_update_stats()
 
         self.state = np.array([self.current_statistics[Parameters(x.value)]
                                for x in
@@ -116,22 +103,15 @@ class CongestionControlEnv(Env):
     def _put_action(self, action):
         self._action_queue.put(action)
 
+    def _reward_function(self, current_ema_throughput, goodput, rtt, rtt_ema,
+                         rtt_min):
+        assert current_ema_throughput > 0.0, f"Throughput greater than 0 expected, got: {current_ema_throughput}"
+        assert goodput >= 0.0, f"Goodput greater than 0 expected, got: {goodput}"
+
+        return math.log(goodput / current_ema_throughput)
+
     def _get_reward(self) -> float:
-        counter = 0
-        while True:
-            logging.debug("GETTING NEW PARAMS - WAITING REWARD REFLECTION...")
-            timestamp = self._fetch_param_and_update_stats()
-            counter += 1
-            if self.current_statistics[Parameters.FINISHED] or self._check_cwnd_coherency_and_wait_srtt_ms(timestamp):
-                break
-
-        logging.info(f"Reflection passed - "
-                     f"Delay: {time.time()* 1000 - timestamp} "
-                     f"State Queue: {self._state_queue.qsize()} "
-                     f"Action Queue: {self._action_queue.qsize()} "
-                     f"Processed messages: {counter}")
-
-        reward = mpo.reward_function(
+        reward = self._reward_function(
             self.current_statistics[Parameters.EMA_THROUGHPUT],
             self.current_statistics[Parameters.THROUGHPUT],
             self.current_statistics[Parameters.LAST_RTT],
@@ -139,10 +119,19 @@ class CongestionControlEnv(Env):
             self.current_statistics[Parameters.MIN_RTT]
         )
 
-        logging.debug(f"REWARD PRODUCED: {reward}")
+        logging.info(f"REWARD PRODUCED: {reward}")
         self.episode_return += reward
 
         return reward
+
+    # Mockets Congestion Window % action
+    def _cwnd_update(self, index) -> int:
+        action = math.ceil(
+            self.current_statistics[Parameters.CURR_WINDOW_SIZE] +
+            self.current_statistics[Parameters.CURR_WINDOW_SIZE] * constants.ACTIONS[index])
+
+        logging.info(f"TAKING ACTION {action}")
+        return action
 
     def report(self):
         logging.info(f"EPISODE {self.num_resets} COMPLETED")
@@ -154,16 +143,12 @@ class CongestionControlEnv(Env):
         logging.info(f"Time taken: {time.time() - self.timer}")
         logging.info(f"EMA THROUGHPUT: "
                      f"{self.current_statistics[Parameters.EMA_THROUGHPUT]}")
-        logging.info(f"COUNTER SUMMARY: {self.counter}")
 
     def reset(self) -> GymObs:
         # if self.num_resets >= 0:
         self.report()
 
         self.current_statistics = dict((param, 0.0) for param in Parameters)
-        self.stats_helper = dict((param, 0.0) for param in Parameters)
-        self.timestamps = dict((param, 0) for param in Parameters)
-        self.counter = dict((param, 0) for param in Parameters)
 
         self.received_params = 0
         self.current_step = 0
@@ -175,10 +160,7 @@ class CongestionControlEnv(Env):
         return self._next_observation()
 
     def step(self, action: np.ndarray) -> GymStepReturn:
-        self._put_action(mpo.cwnd_update(self.current_statistics,
-                                         self.stats_helper,
-                                         action)
-                         )
+        self._put_action(self._cwnd_update(action))
         self.current_step += 1
         self.total_steps += 1
         reward = self._get_reward()
