@@ -17,8 +17,20 @@ from constants import Parameters, State
 logging.basicConfig(level=logging.INFO)
 
 
-def _delta_timestamp_micro(timestamp_2, timestamp_1):
-    return (timestamp_2 - timestamp_1) * 1000
+def writable_bytes(cwnd: float, inflight_bytes: float, lrtt: float) -> float:
+    return cwnd / lrtt * 1000 - inflight_bytes
+
+
+def throughput(sent_bytes: float, delta: int) -> float:
+    return sent_bytes if delta == 0 else sent_bytes/delta
+
+
+def ema_throughput(current_ema_throughput: float, current_throughput: float,
+                   alpha: float) -> float:
+    if current_ema_throughput == 0.0:
+        return current_throughput
+    else:
+        return (1 - alpha) * current_ema_throughput + alpha * current_throughput
 
 
 class CongestionControlEnv(Env):
@@ -48,8 +60,8 @@ class CongestionControlEnv(Env):
         self.episode_return = 0
         self.timer = 0
 
+        self.previous_timestamp = 0
         self.received_params = 0
-
         self.current_statistics = dict((param, 0.0) for param in Parameters)
         # Run server in a different process
         self._server_process: Process
@@ -72,17 +84,38 @@ class CongestionControlEnv(Env):
         self._server_process.daemon = True
         self._server_process.start()
 
-    def _check_cwnd_coherency_and_wait_srtt_ms(self, timestamp):
-        return self.current_statistics[Parameters.CURR_WINDOW_SIZE] == self.stats_helper[Parameters.CURR_WINDOW_SIZE] \
-               and _delta_timestamp_micro(timestamp, self.timestamps[Parameters.CURR_WINDOW_SIZE]) > self.current_statistics[Parameters.SRTT]
+    def _process_missing_params(self):
+        if self.previous_timestamp == 0:
+            delta = 0
+        else:
+            delta = self.current_statistics[Parameters.TIMESTAMP] - self.previous_timestamp
 
-    def _check_detected_sent_bytes_and_cwnd(self):
-        return (self.current_statistics[Parameters.SENT_BYTES] and
-                self.current_statistics[Parameters.CURR_WINDOW_SIZE]) == constants.STARTING_WINDOW_SIZE
+        self.current_statistics[Parameters.THROUGHPUT] = throughput(
+            self.current_statistics[Parameters.SENT_BYTES_TIMEFRAME],
+            delta
+        )
+        self.current_statistics[Parameters.GOODPUT] = throughput(
+            self.current_statistics[Parameters.SENT_GOOD_BYTES_TIMEFRAME],
+            delta
+        )
+        self.current_statistics[Parameters.EMA_THROUGHPUT] = ema_throughput(
+            self.current_statistics[Parameters.EMA_THROUGHPUT],
+            self.current_statistics[Parameters.THROUGHPUT],
+            constants.ALPHA
+        )
+        self.current_statistics[Parameters.EMA_GOODPUT] = ema_throughput(
+            self.current_statistics[Parameters.EMA_GOODPUT],
+            self.current_statistics[Parameters.GOODPUT],
+            constants.ALPHA
+        )
+        self.current_statistics[Parameters.WRITABLE_BYTES] = writable_bytes(
+            self.current_statistics[Parameters.CURR_WINDOW_SIZE],
+            self.current_statistics[Parameters.UNACK_BYTES],
+            self.current_statistics[Parameters.LAST_RTT]
+        )
 
     def _fetch_param_and_update_stats(self) -> int:
         self.current_statistics = self._state_queue.get()
-        logging.info(f"STATE: {self.current_statistics}")
 
         return self.current_statistics[Parameters.TIMESTAMP]
 
@@ -90,6 +123,13 @@ class CongestionControlEnv(Env):
         logging.info("FEEDING STATE..")
 
         timestamp = self._fetch_param_and_update_stats()
+        self._process_missing_params()
+        self.previous_timestamp = timestamp
+
+        logging.info(f"STATE FED WITH DELAY - "
+                     f"{time.time() * 1000 - timestamp}ms")
+
+        logging.info(f"STATE: {self.current_statistics}")
 
         self.state = np.array([self.current_statistics[Parameters(x.value)]
                                for x in
@@ -113,13 +153,14 @@ class CongestionControlEnv(Env):
     def _get_reward(self) -> float:
         reward = self._reward_function(
             self.current_statistics[Parameters.EMA_THROUGHPUT],
-            self.current_statistics[Parameters.THROUGHPUT],
+            self.current_statistics[Parameters.GOODPUT],
             self.current_statistics[Parameters.LAST_RTT],
             self.current_statistics[Parameters.VAR_RTT],
             self.current_statistics[Parameters.MIN_RTT]
         )
 
-        logging.info(f"REWARD PRODUCED: {reward}")
+        logging.info(f"REWARD PRODUCED: {reward} after "
+                     f"{time.time()*1000 - self.previous_timestamp}ms")
         self.episode_return += reward
 
         return reward

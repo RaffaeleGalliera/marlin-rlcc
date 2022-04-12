@@ -26,25 +26,18 @@ message CommunicationState {
     int64 unack_bytes = 7;
     int64 retransmissions = 8;
     int64 cumulative_packet_loss = 9;
-    int64 writable_bytes = 10;
 
-    float throughput = 11;
-    float goodput = 12;
-    float ema_throughput = 13;
-    float ema_goodput = 14;
+    int64 last_rtt = 10;
+    int64 min_rtt = 11;
+    int64 max_rtt = 12;
+    float srtt = 13;
+    float var_rtt = 14;
 
-    int64 last_rtt = 15;
-    int64 min_rtt = 16;
-    int64 max_rtt = 17;
-    float srtt = 18;
-    float var_rtt = 19;
-
-    int64 timestamp = 20;
-    bool finished = 21;
+    int64 timestamp = 15;
+    bool finished = 16;
 }
 
 // Actions represent the CongestionWindow update to be performed
 message Action {
     int64 cwnd_update = 1;
 }
-
