@@ -17,7 +17,7 @@ class CongestionControlStub(object):
         """
         self.OptimizeCongestionControl = channel.stream_stream(
                 '/congestioncontrol.CongestionControl/OptimizeCongestionControl',
-                request_serializer=protos_dot_congestion__control__pb2.Parameter.SerializeToString,
+                request_serializer=protos_dot_congestion__control__pb2.CommunicationState.SerializeToString,
                 response_deserializer=protos_dot_congestion__control__pb2.Action.FromString,
                 )
 
@@ -41,7 +41,7 @@ def add_CongestionControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'OptimizeCongestionControl': grpc.stream_stream_rpc_method_handler(
                     servicer.OptimizeCongestionControl,
-                    request_deserializer=protos_dot_congestion__control__pb2.Parameter.FromString,
+                    request_deserializer=protos_dot_congestion__control__pb2.CommunicationState.FromString,
                     response_serializer=protos_dot_congestion__control__pb2.Action.SerializeToString,
             ),
     }
@@ -67,7 +67,7 @@ class CongestionControl(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.stream_stream(request_iterator, target, '/congestioncontrol.CongestionControl/OptimizeCongestionControl',
-            protos_dot_congestion__control__pb2.Parameter.SerializeToString,
+            protos_dot_congestion__control__pb2.CommunicationState.SerializeToString,
             protos_dot_congestion__control__pb2.Action.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

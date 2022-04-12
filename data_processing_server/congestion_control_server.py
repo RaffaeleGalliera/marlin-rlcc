@@ -12,6 +12,7 @@ import time
 import grpc
 from protos import congestion_control_pb2, congestion_control_pb2_grpc
 from multiprocessing import Queue
+from constants import  Parameters
 
 
 class CongestionControlService(congestion_control_pb2_grpc.
@@ -26,37 +27,53 @@ class CongestionControlService(congestion_control_pb2_grpc.
     # with JMockets
     async def OptimizeCongestionControl(self,
                                         request_iterator: AsyncIterable[
-                                            congestion_control_pb2.Parameter],
+                                            congestion_control_pb2.CommunicationState],
                                         unused_context) -> AsyncIterable[
                                             congestion_control_pb2.Action]:
 
-        parameter = dict()
+        parameter = dict((param, 0) for param in Parameters)
         async for status in request_iterator:
-            logging.info(f"DELAY SERVER ACTION RECEIVED "
-                         f"{time.time() * 1000 - status.timestamp}")
-            # Run the I/O blocking Queue communication with Marlin
-            # Environment in a different thread and wait for response
+            # logging.info(f"DELAY SERVER ACTION RECEIVED "
+            #              f"{time.time() * 1000 - status.timestamp}")
+
             loop = asyncio.get_event_loop()
-            logging.debug("GRPC SERVER - Sending message...")
-            parameter = {
-                'value': status.value,
-                'parameter_type': status.parameter_type,
-                'timestamp': status.timestamp
-            }
+
+            parameter[Parameters.CURR_WINDOW_SIZE] = status.curr_window_size
+
+            parameter[Parameters.SENT_BYTES] = status.cumulative_sent_bytes
+            parameter[Parameters.RCV_BYTES] = status.cumulative_rcv_bytes
+            parameter[Parameters.SENT_GOOD_BYTES] = status.cumulative_sent_good_bytes
+            parameter[Parameters.SENT_BYTES_TIMEFRAME] = status.sent_bytes_timeframe
+            parameter[Parameters.SENT_GOOD_BYTES_TIMEFRAME] = status.sent_good_bytes_timeframe;
+
+            parameter[Parameters.UNACK_BYTES] = status.unack_bytes
+            parameter[Parameters.RETRANSMISSIONS] = status.retransmissions
+            parameter[Parameters.CUMULATIVE_PACKET_LOSS] = status.cumulative_packet_loss
+            parameter[Parameters.WRITABLE_BYTES] = status.writable_bytes
+
+            parameter[Parameters.THROUGHPUT] = status.throughput
+            parameter[Parameters.GOODPUT] = status.goodput
+            parameter[Parameters.EMA_THROUGHPUT] = status.ema_throughput
+            parameter[Parameters.EMA_GOODPUT] = status.ema_goodput
+
+            parameter[Parameters.LAST_RTT] = status.last_rtt
+            parameter[Parameters.MIN_RTT] = status.min_rtt
+            parameter[Parameters.MAX_RTT] = status.max_rtt
+            parameter[Parameters.SRTT] = status.srtt
+            parameter[Parameters.VAR_RTT] = status.var_rtt
+
+            parameter[Parameters.TIMESTAMP] = status.timestamp
+            parameter[Parameters.FINISHED] = status.finished
 
             # Put in queue, note that queue is infinite aka doesn't block
             self._state_queue.put(parameter)
 
-            try:
-                action = self._action_queue.get(block=False)
+            action = await loop.run_in_executor(None,
+                                                self._action_queue.get)
 
-            except queue.Empty:
-                logging.debug("GRPC SERVER - Action not ready, continuing ...")
-                pass
-            else:
-                logging.debug(f"GRPC SERVER - Action ready, sending {action} "
+            logging.debug(f"GRPC SERVER - Action ready, sending {action} "
                               f"to Mockets")
-                yield congestion_control_pb2.Action(cwnd_update=action)
+            yield congestion_control_pb2.Action(cwnd_update=action)
 
 
 async def serve(action_queue: Queue, state_queue: Queue) -> None:
