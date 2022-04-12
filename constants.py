@@ -64,8 +64,6 @@ class State(Enum):
     SRTT = 18
     VAR_RTT = 19
 
-    FINISHED = 21
-
 
 # TODO: 'rtt_standing',  # Min RTT over
 # win of size
