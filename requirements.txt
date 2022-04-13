@@ -3,3 +3,4 @@ grpcio-tools
 numpy
 stable-baselines3
 pytest
+wandb

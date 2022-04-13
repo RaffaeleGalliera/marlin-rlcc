@@ -7,12 +7,10 @@ import asyncio
 import logging
 from typing import AsyncIterable, Optional, Union
 
-import numpy as np
-import time
 import grpc
 from protos import congestion_control_pb2, congestion_control_pb2_grpc
 from multiprocessing import Queue
-from constants import  Parameters
+from constants import Parameters
 
 
 class CongestionControlService(congestion_control_pb2_grpc.
@@ -33,9 +31,6 @@ class CongestionControlService(congestion_control_pb2_grpc.
 
         parameter = dict((param, 0) for param in Parameters)
         async for status in request_iterator:
-            # logging.info(f"DELAY SERVER ACTION RECEIVED "
-            #              f"{time.time() * 1000 - status.timestamp}")
-
             loop = asyncio.get_event_loop()
 
             parameter[Parameters.CURR_WINDOW_SIZE] = status.curr_window_size
@@ -84,8 +79,7 @@ async def serve(action_queue: Queue, state_queue: Queue) -> None:
 
 def run(action_queue: Queue,
         state_queue: Queue) -> None:
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig()
     loop = asyncio.get_event_loop()
-    loop.set_debug(True)
     loop.run_until_complete(
         serve(action_queue, state_queue))

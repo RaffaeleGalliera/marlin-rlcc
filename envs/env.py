@@ -1,4 +1,3 @@
-import queue
 import time
 from multiprocessing import Queue, Process
 import numpy as np
@@ -117,19 +116,19 @@ class CongestionControlEnv(Env):
         return self.current_statistics[Parameters.TIMESTAMP]
 
     def _get_state(self) -> np.array:
-        logging.info("FETCHING STATE..")
+        logging.debug("FETCHING STATE..")
 
         if not self.current_statistics[Parameters.FINISHED]:
             timestamp = self._fetch_param_and_update_stats()
             self._process_missing_params()
             self.previous_timestamp = timestamp
 
-            logging.info(f"STATE RECEIVED WITH DELAY: "
+            logging.debug(f"STATE RECEIVED WITH DELAY: "
                          f"{time.time() * 1000 - timestamp}ms")
 
-            logging.info(f"STATE: {self.current_statistics}")
+            logging.debug(f"STATE: {self.current_statistics}")
         else:
-            logging.info("SKIPPING STATE FETCH")
+            logging.debug("SKIPPING STATE FETCH")
 
         self.state = np.array([self.current_statistics[Parameters(x.value)]
                                for x in
@@ -159,7 +158,7 @@ class CongestionControlEnv(Env):
             self.current_statistics[Parameters.MIN_RTT]
         )
 
-        logging.info(f"REWARD PRODUCED: {reward} after "
+        logging.debug(f"REWARD PRODUCED: {reward} after "
                      f"{time.time()*1000 - self.previous_timestamp}ms from "
                      f"received the action")
         self.episode_return += reward
@@ -172,8 +171,10 @@ class CongestionControlEnv(Env):
             self.current_statistics[Parameters.CURR_WINDOW_SIZE] +
             self.current_statistics[Parameters.CURR_WINDOW_SIZE] * constants.ACTIONS[index])
 
-        logging.info(f"TAKING ACTION {action}")
-        return action
+        logging.debug(f"TAKING ACTION {action}")
+
+        # Bound to int64 range
+        return action if action < constants.CWND_UPPER_LIMIT else constants.CWND_UPPER_LIMIT
 
     def report(self):
         logging.info(f"EPISODE {self.num_resets} COMPLETED")
