@@ -15,8 +15,8 @@ from constants import Parameters, State
 logging.basicConfig(level=logging.INFO)
 
 
-def writable_bytes(cwnd: float, inflight_bytes: float, lrtt: float) -> float:
-    return cwnd / lrtt * 1000 - inflight_bytes
+def writable_bytes(cwnd: float, inflight_bytes: float) -> float:
+    return cwnd - inflight_bytes
 
 
 def throughput(sent_bytes: float, delta: int) -> float:
@@ -33,7 +33,6 @@ def ema_throughput(current_ema_throughput: float, current_throughput: float,
 
 class CongestionControlEnv(Env):
     def __init__(self,
-                 total_timesteps,
                  num_actions: int = len(constants.ACTIONS),
                  observation_length: int = len(State)):
         """
@@ -53,7 +52,6 @@ class CongestionControlEnv(Env):
         self.current_step = 0
         self.total_steps = 0
         self.num_resets = -1
-        self.total_timesteps = total_timesteps
         self.episode_return = 0
         self.timer = 0
 
@@ -106,8 +104,7 @@ class CongestionControlEnv(Env):
         )
         self.current_statistics[Parameters.WRITABLE_BYTES] = writable_bytes(
             self.current_statistics[Parameters.CURR_WINDOW_SIZE],
-            self.current_statistics[Parameters.UNACK_BYTES],
-            self.current_statistics[Parameters.LAST_RTT]
+            self.current_statistics[Parameters.UNACK_BYTES]
         )
 
     def _fetch_param_and_update_stats(self) -> int:
@@ -142,20 +139,24 @@ class CongestionControlEnv(Env):
     def _put_action(self, action):
         self._action_queue.put(action)
 
-    def _reward_function(self, current_ema_throughput, goodput, rtt, rtt_ema,
-                         rtt_min):
+    def _reward_function(self, current_ema_throughput, goodput,
+                         instant_throughput, ema_rtt, rtt_min,
+                         retransmissions):
         assert current_ema_throughput > 0.0, f"Throughput greater than 0 expected, got: {current_ema_throughput}"
         assert goodput >= 0.0, f"Goodput greater than 0 expected, got: {goodput}"
 
-        return math.log(goodput / current_ema_throughput)
+        a = math.log(instant_throughput / ((1 + retransmissions) * (ema_rtt/rtt_min)))
+        b = (1 + math.log(goodput/current_ema_throughput))
+        return a * b
 
     def _get_reward(self) -> float:
         reward = self._reward_function(
             self.current_statistics[Parameters.EMA_THROUGHPUT],
             self.current_statistics[Parameters.GOODPUT],
-            self.current_statistics[Parameters.LAST_RTT],
-            self.current_statistics[Parameters.VAR_RTT],
-            self.current_statistics[Parameters.MIN_RTT]
+            self.current_statistics[Parameters.THROUGHPUT],
+            self.current_statistics[Parameters.SRTT],
+            self.current_statistics[Parameters.MIN_RTT],
+            self.current_statistics[Parameters.RETRANSMISSIONS]
         )
 
         logging.debug(f"REWARD PRODUCED: {reward} after "
@@ -179,8 +180,6 @@ class CongestionControlEnv(Env):
     def report(self):
         logging.info(f"EPISODE {self.num_resets} COMPLETED")
         logging.info(f"Steps taken in episode: {self.current_step}")
-        logging.info(f"Total steps until training completion: "
-                     f"{self.total_timesteps - self.total_steps}")
         logging.info(f"Return accumulated: {self.episode_return}")
         logging.info(f"Time taken: {time.time() - self.timer}")
         logging.info(f"EMA THROUGHPUT: "

@@ -48,11 +48,8 @@ class State(Enum):
 
     UNACK_BYTES = 7
     RETRANSMISSIONS = 8
-    CUMULATIVE_PACKET_LOSS = 9
-    WRITABLE_BYTES = 10
 
     # Other Params
-
     THROUGHPUT = 11
     GOODPUT = 12
     EMA_THROUGHPUT = 13
