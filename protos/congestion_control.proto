@@ -11,26 +11,30 @@ service CongestionControl {
     //
     // Accept a stream of TransmissionStatuses sent while the optimal action
     // is waiting to be computed other TransmissionStatuses are recieved
-    rpc OptimizeCongestionControl(stream Parameter) returns (stream Action) {}
+    rpc OptimizeCongestionControl(stream CommunicationState) returns (stream Action) {}
 }
 
-message Parameter {
-    enum parameterType {
-        CHUNK_RTT_MICRO = 0;
-        MIN_ACK_TIME_MICRO = 1;
-        SENT_BYTES = 2;
-        RCV_BYTES = 3;
-        SENT_GOOD_BYTES = 4;
-        CURR_WINDOW_SIZE = 5;
-        UNACK_BYTES = 6;
-        RETRANSMISSIONS = 7;
-        CUMULATIVE_PACKET_LOSS = 8;
-        FINISHED = 9;
-    }
+message CommunicationState {
+    int64 curr_window_size = 1;
 
-    int64 value = 1;
-    int64 timestamp = 2;
-    parameterType parameter_type = 3;
+    int64 cumulative_sent_bytes = 2;
+    int64 cumulative_rcv_bytes = 3;
+    int64 cumulative_sent_good_bytes = 4;
+    int64 sent_bytes_timeframe = 5;
+    int64 sent_good_bytes_timeframe = 6;
+
+    int64 unack_bytes = 7;
+    int64 retransmissions = 8;
+    int64 cumulative_packet_loss = 9;
+
+    int64 last_rtt = 10;
+    int64 min_rtt = 11;
+    int64 max_rtt = 12;
+    float srtt = 13;
+    float var_rtt = 14;
+
+    int64 timestamp = 15;
+    bool finished = 16;
 }
 
 // Actions represent the CongestionWindow update to be performed

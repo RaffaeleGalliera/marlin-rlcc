@@ -2,3 +2,6 @@
 	path = third-party/jmockets
 	url = ssh://git@gitn.ihmc.us:22000/nomads/jmockets.git
 	branch = grpc2
+[submodule "third-party/rl-baselines3-zoo"]
+	path = third-party/rl-baselines3-zoo
+	url = https://github.com/RaffaeleGalliera/rl-baselines3-zoo.git
