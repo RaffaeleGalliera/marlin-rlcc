@@ -19,7 +19,7 @@ def writable_bytes(cwnd: float, inflight_bytes: float) -> float:
     return cwnd - inflight_bytes
 
 
-def throughput(sent_bytes: float, delta: int) -> float:
+def throughput(sent_bytes: float, delta: float) -> float:
     return sent_bytes if delta == 0 else sent_bytes/delta
 
 
@@ -53,7 +53,9 @@ class CongestionControlEnv(Env):
         self.total_steps = 0
         self.num_resets = -1
         self.episode_return = 0
-        self.timer = 0
+        self.episode_start_time = 0
+        self.episode_time = 0
+        self.action_delay = 0
 
         self.previous_timestamp = 0
         self.current_statistics = dict((param, 0.0) for param in Parameters)
@@ -86,11 +88,11 @@ class CongestionControlEnv(Env):
 
         self.current_statistics[Parameters.THROUGHPUT] = throughput(
             self.current_statistics[Parameters.SENT_BYTES_TIMEFRAME],
-            delta
+            delta/1000  # Throughput B/Sec
         )
         self.current_statistics[Parameters.GOODPUT] = throughput(
             self.current_statistics[Parameters.SENT_GOOD_BYTES_TIMEFRAME],
-            delta
+            delta/1000  # Throughput B/Sec
         )
         self.current_statistics[Parameters.EMA_THROUGHPUT] = ema_throughput(
             self.current_statistics[Parameters.EMA_THROUGHPUT],
@@ -141,13 +143,11 @@ class CongestionControlEnv(Env):
 
     def _reward_function(self, current_ema_throughput, goodput,
                          instant_throughput, ema_rtt, rtt_min,
-                         retransmissions):
-        assert current_ema_throughput > 0.0, f"Throughput greater than 0 expected, got: {current_ema_throughput}"
-        assert goodput >= 0.0, f"Goodput greater than 0 expected, got: {goodput}"
-
-        a = math.log(instant_throughput / ((1 + retransmissions) * (ema_rtt/rtt_min)))
-        b = (1 + math.log(goodput/current_ema_throughput))
-        return a * b
+                         ema_retransmissions):
+        eps = 0.05
+        a = math.log((eps + instant_throughput) / ((1 + ema_retransmissions) * ema_rtt))
+        # b = (1 + math.log(goodput/current_ema_throughput))
+        return a
 
     def _get_reward(self) -> float:
         reward = self._reward_function(
@@ -156,12 +156,9 @@ class CongestionControlEnv(Env):
             self.current_statistics[Parameters.THROUGHPUT],
             self.current_statistics[Parameters.SRTT],
             self.current_statistics[Parameters.MIN_RTT],
-            self.current_statistics[Parameters.RETRANSMISSIONS]
+            self.current_statistics[Parameters.EMA_RETRANSMISSIONS]
         )
 
-        logging.debug(f"REWARD PRODUCED: {reward} after "
-                     f"{time.time()*1000 - self.previous_timestamp}ms from "
-                     f"received the action")
         self.episode_return += reward
 
         return reward
@@ -172,6 +169,7 @@ class CongestionControlEnv(Env):
             self.current_statistics[Parameters.CURR_WINDOW_SIZE] +
             self.current_statistics[Parameters.CURR_WINDOW_SIZE] * constants.ACTIONS[index])
 
+        action = action * 1000
         logging.debug(f"TAKING ACTION {action}")
 
         # Bound to int64 range
@@ -181,7 +179,7 @@ class CongestionControlEnv(Env):
         logging.info(f"EPISODE {self.num_resets} COMPLETED")
         logging.info(f"Steps taken in episode: {self.current_step}")
         logging.info(f"Return accumulated: {self.episode_return}")
-        logging.info(f"Time taken: {time.time() - self.timer}")
+        logging.info(f"Time taken: {time.time() - self.episode_start_time}")
         logging.info(f"EMA THROUGHPUT: "
                      f"{self.current_statistics[Parameters.EMA_THROUGHPUT]}")
 
@@ -194,19 +192,37 @@ class CongestionControlEnv(Env):
         self.current_step = 0
         self.num_resets += 1
         self.episode_return = 0
-        self.timer = time.time()
+        self.episode_start_time = time.time()
 
         return self._next_observation()
 
     def step(self, action: np.ndarray) -> GymStepReturn:
-        self._put_action(self._cwnd_update(action))
-        reward = self._get_reward()
+        if self.current_step == 0:
+            logging.info(self.current_statistics)
 
+        self._put_action(self._cwnd_update(action))
         self.current_step += 1
         self.total_steps += 1
+        self.action_delay = time.time() * 1000 - self.previous_timestamp
 
-        done = True if self.current_statistics[Parameters.FINISHED] else False
-        return self._next_observation(), reward, done, {}
+        reward = self._get_reward()
+        info = {
+            'current_statistics': self.current_statistics,
+            'action': constants.ACTIONS[action],
+            'reward': reward,
+            'action_delay': self.action_delay,
+        }
+        done = False
+        if self.current_statistics[Parameters.FINISHED]:
+            done = True
+            self.episode_time = time.time() - self.episode_start_time
+            info['episode_time'] = self.episode_time
+
+        observation = self._next_observation()
+
+        if done:
+            logging.info(f"Done - Stats: {self.current_statistics}")
+        return observation, reward, done, info
 
     def render(self, mode: str = "console") -> None:
         pass

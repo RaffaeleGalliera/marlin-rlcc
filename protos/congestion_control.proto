@@ -15,23 +15,23 @@ service CongestionControl {
 }
 
 message CommunicationState {
-    int64 curr_window_size = 1;
+    double curr_window_size = 1;
 
-    int64 cumulative_sent_bytes = 2;
-    int64 cumulative_rcv_bytes = 3;
-    int64 cumulative_sent_good_bytes = 4;
-    int64 sent_bytes_timeframe = 5;
-    int64 sent_good_bytes_timeframe = 6;
+    double cumulative_sent_bytes = 2;
+    double cumulative_rcv_bytes = 3;
+    double cumulative_sent_good_bytes = 4;
+    double sent_bytes_timeframe = 5;
+    double sent_good_bytes_timeframe = 6;
 
-    int64 unack_bytes = 7;
-    int64 retransmissions = 8;
-    int64 cumulative_packet_loss = 9;
+    double unack_bytes = 7;
+    double retransmissions = 8;
+    double ema_retransmissions = 9;
 
-    int64 last_rtt = 10;
-    int64 min_rtt = 11;
-    int64 max_rtt = 12;
-    float srtt = 13;
-    float var_rtt = 14;
+    double last_rtt = 10;
+    double min_rtt = 11;
+    double max_rtt = 12;
+    double srtt = 13;
+    double var_rtt = 14;
 
     int64 timestamp = 15;
     bool finished = 16;

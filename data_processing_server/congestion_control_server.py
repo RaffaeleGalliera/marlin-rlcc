@@ -43,7 +43,7 @@ class CongestionControlService(congestion_control_pb2_grpc.
 
             parameter[Parameters.UNACK_BYTES] = status.unack_bytes
             parameter[Parameters.RETRANSMISSIONS] = status.retransmissions
-            parameter[Parameters.CUMULATIVE_PACKET_LOSS] = status.cumulative_packet_loss
+            parameter[Parameters.EMA_RETRANSMISSIONS] = status.ema_retransmissions;
 
             parameter[Parameters.LAST_RTT] = status.last_rtt
             parameter[Parameters.MIN_RTT] = status.min_rtt

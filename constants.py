@@ -16,7 +16,7 @@ class Parameters(Enum):
 
     UNACK_BYTES = 7
     RETRANSMISSIONS = 8
-    CUMULATIVE_PACKET_LOSS = 9
+    EMA_RETRANSMISSIONS = 9
     WRITABLE_BYTES = 10
 
     # Other Params
@@ -48,6 +48,7 @@ class State(Enum):
 
     UNACK_BYTES = 7
     RETRANSMISSIONS = 8
+    EMA_RETRANSMISSIONS = 9
 
     # Other Params
     THROUGHPUT = 11
