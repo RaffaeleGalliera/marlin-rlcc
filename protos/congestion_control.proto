@@ -24,17 +24,18 @@ message CommunicationState {
     double sent_good_bytes_timeframe = 6;
 
     double unack_bytes = 7;
-    double retransmissions = 8;
-    double ema_retransmissions = 9;
+    double cumulative_retransmissions = 8;
+    double retransmissions = 9;
+    double ema_retransmissions = 10;
 
-    double last_rtt = 10;
-    double min_rtt = 11;
-    double max_rtt = 12;
-    double srtt = 13;
-    double var_rtt = 14;
+    double last_rtt = 11;
+    double min_rtt = 12;
+    double max_rtt = 13;
+    double srtt = 14;
+    double var_rtt = 15;
 
-    int64 timestamp = 15;
-    bool finished = 16;
+    int64 timestamp = 16;
+    bool finished = 17;
 }
 
 // Actions represent the CongestionWindow update to be performed
