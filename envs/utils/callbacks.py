@@ -57,6 +57,8 @@ class TrainingCallback(BaseCallback):
                         'current_statistics'][Parameters.LAST_RTT],
                     "training/observations/retransmissions": info[
                         'current_statistics'][Parameters.RETRANSMISSIONS],
+                    "training/observations/ema_retransmissions": info[
+                        'current_statistics'][Parameters.EMA_RETRANSMISSIONS],
                     "training/observations/current_window_size_KB": info[
                         'current_statistics'][Parameters.CURR_WINDOW_SIZE],
                     'training/action': info['action'],
