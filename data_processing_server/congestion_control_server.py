@@ -42,8 +42,9 @@ class CongestionControlService(congestion_control_pb2_grpc.
             parameter[Parameters.SENT_GOOD_BYTES_TIMEFRAME] = status.sent_good_bytes_timeframe;
 
             parameter[Parameters.UNACK_BYTES] = status.unack_bytes
+            parameter[Parameters.CUMULATIVE_RETRANSMISSIONS] = status.cumulative_retransmissions
             parameter[Parameters.RETRANSMISSIONS] = status.retransmissions
-            parameter[Parameters.CUMULATIVE_PACKET_LOSS] = status.cumulative_packet_loss
+            parameter[Parameters.EMA_RETRANSMISSIONS] = status.ema_retransmissions;
 
             parameter[Parameters.LAST_RTT] = status.last_rtt
             parameter[Parameters.MIN_RTT] = status.min_rtt
@@ -65,21 +66,22 @@ class CongestionControlService(congestion_control_pb2_grpc.
             yield congestion_control_pb2.Action(cwnd_update=action)
 
 
-async def serve(action_queue: Queue, state_queue: Queue) -> None:
+async def serve(action_queue: Queue, state_queue: Queue, port: int) -> None:
     server = grpc.aio.server()
     congestion_control_pb2_grpc.add_CongestionControlServicer_to_server(
         CongestionControlService(action_queue, state_queue),
         server
     )
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port(f'[::]:{port}')
     logging.info('SERVER - Listening...')
     await server.start()
     await server.wait_for_termination()
 
 
 def run(action_queue: Queue,
-        state_queue: Queue) -> None:
+        state_queue: Queue,
+        port: int) -> None:
     logging.basicConfig()
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
-        serve(action_queue, state_queue))
+        serve(action_queue, state_queue, port))

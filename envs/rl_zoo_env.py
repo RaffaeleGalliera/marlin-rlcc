@@ -11,6 +11,7 @@ import data_processing_server.congestion_control_server as cc_server
 import constants
 import math
 from constants import Parameters, State
+import subprocess
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,6 +34,8 @@ def ema_throughput(current_ema_throughput: float, current_throughput: float,
 
 class CongestionControlEnv(Env):
     def __init__(self,
+                 mocket_server_ip: str = "192.168.1.17",
+                 grpc_port: int = 50051,
                  num_actions: int = len(constants.ACTIONS),
                  observation_length: int = len(State)):
         """
@@ -61,22 +64,34 @@ class CongestionControlEnv(Env):
         self.current_statistics = dict((param, 0.0) for param in Parameters)
         # Run server in a different process
         self._server_process: Process
-        self._run_server_process()
+        self._run_server_process(grpc_port)
+
+        # Run Mockets
+        mockets_args = ['/home/user/jmockets/gradlew',
+                        ':examples:runCCTrainingClient',
+                        f"--args=-ip {mocket_server_ip} --grpc-server localhost:{grpc_port}",
+                        '-p',
+                        '/home/user/jmockets']
+
+        self._mocket_process = subprocess.Popen(mockets_args)
+        self._mocket_process.daemon = True
 
         # self.reset()
 
     def __del__(self):
         """Book-keeping to release resources"""
         self._server_process.terminate()
+        self._mocket_process.terminate()
         self._state_queue.close()
         self._action_queue.close()
 
-    def _run_server_process(self):
+    def _run_server_process(self, port: int):
         """Run the server process"""
         self._server_process = Process(
             target=cc_server.run,
             args=(self._action_queue,
-                  self._state_queue))
+                  self._state_queue,
+                  port))
         self._server_process.daemon = True
         self._server_process.start()
 
