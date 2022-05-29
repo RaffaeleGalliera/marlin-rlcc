@@ -1,3 +1,4 @@
+import os
 import time
 from multiprocessing import Queue, Process
 import numpy as np
@@ -32,18 +33,45 @@ def ema_throughput(current_ema_throughput: float, current_throughput: float,
         return (1 - alpha) * current_ema_throughput + alpha * current_throughput
 
 
+def mockets_gradlew_args_call(mockets_server_ip: str, grpc_port: int):
+    return ['/home/user/jmockets/gradlew',
+            ':examples:runCCTrainingClient',
+            f"--args=-ip {mockets_server_ip} --grpc-server localhost:{grpc_port}",
+            '-p',
+            '/home/user/jmockets']
+
+
+def mockets_dist_args_call(mockets_server_ip: str, grpc_port: int):
+    return ['/home/user/marlin/examples/bin/examples',
+            '-ip',
+            f'{mockets_server_ip}',
+            '--grpc-server',
+            f'localhost:{grpc_port}']
+
+
 class CongestionControlEnv(Env):
     def __init__(self,
+                 n_timesteps: int,
+                 continuos_actions: bool = False,
+                 continuos_throttle: bool = False,
                  mocket_server_ip: str = "192.168.1.17",
                  grpc_port: int = 50051,
                  num_actions: int = len(constants.ACTIONS),
-                 observation_length: int = len(State)):
+                 observation_length: int = len(State),
+                 max_number_of_steps: int = 70000):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
         :param observation_lenght: the lenght of the observations
         """
-        self.action_space = Discrete(num_actions)
+        self.has_eval_been_launched = False
+        if continuos_actions:
+            if continuos_throttle:
+                self.action_space = Box(low=-1, high=+1, shape=(1,), dtype=np.float32)
+            else:
+                self.action_space = Box(low=0, high=+1, shape=(1,), dtype=np.float32)
+        else:
+            self.action_space = Discrete(num_actions)
         self.observation_space = Box(low=-float("inf"),
                                      high=float("inf"),
                                      shape=(observation_length,))
@@ -54,44 +82,62 @@ class CongestionControlEnv(Env):
 
         self.current_step = 0
         self.total_steps = 0
-        self.num_resets = -1
+        self.num_resets = 0
         self.episode_return = 0
         self.episode_start_time = 0
         self.episode_time = 0
         self.action_delay = 0
+        self.n_timestep = n_timesteps
+        self.continuos_actions = continuos_actions
+        self.continuos_throttle = continuos_throttle
 
         self.previous_timestamp = 0
         self.current_statistics = dict((param, 0.0) for param in Parameters)
+
+        self._mockets_server_ip = mocket_server_ip
+        self.grpc_port = grpc_port
+
         # Run server in a different process
-        self._server_process: Process
-        self._run_server_process(grpc_port)
+        self._server_process = None
+        self._mocket_process = None
 
-        # Run Mockets
-        mockets_args = ['/home/user/jmockets/gradlew',
-                        ':examples:runCCTrainingClient',
-                        f"--args=-ip {mocket_server_ip} --grpc-server localhost:{grpc_port}",
-                        '-p',
-                        '/home/user/jmockets']
-
-        self._mocket_process = subprocess.Popen(mockets_args)
-        self._mocket_process.daemon = True
+        self._max_number_of_steps = max_number_of_steps
 
         # self.reset()
 
     def __del__(self):
         """Book-keeping to release resources"""
-        self._server_process.terminate()
-        self._mocket_process.terminate()
-        self._state_queue.close()
-        self._action_queue.close()
+        if self._server_process is not None and self._mocket_process is not None:
+            while True:
+                try:
+                    self._mocket_process.wait(1)
+                    break
+                except subprocess.TimeoutExpired:
+                    logging.info("Waiting for Mockets to gently terminate...")
 
-    def _run_server_process(self, port: int):
+            logging.info("Closing GRPC Server...")
+            self._server_process.terminate()
+
+            self._server_process.join()
+            self._server_process.close()
+
+            self._action_queue.close()
+            self._state_queue.close()
+
+    def _run_mockets_client(self, mockets_server_address, grpc_port):
+        self._mocket_process = subprocess.Popen(mockets_dist_args_call(
+            mockets_server_address,
+            grpc_port
+        ), stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        self._mocket_process.daemon = True
+
+    def _run_grpc_server(self, port: int):
         """Run the server process"""
         self._server_process = Process(
             target=cc_server.run,
             args=(self._action_queue,
                   self._state_queue,
-                  port))
+                  port), name='marlin_grpc')
         self._server_process.daemon = True
         self._server_process.start()
 
@@ -156,23 +202,20 @@ class CongestionControlEnv(Env):
     def _put_action(self, action):
         self._action_queue.put(action)
 
-    def _reward_function(self, current_ema_throughput, goodput,
-                         instant_throughput, ema_rtt, rtt_min,
-                         ema_retransmissions, cumulative_retransmissions):
-        eps = 0.05
-        a = math.log((eps + instant_throughput) / ((1 + cumulative_retransmissions) * ema_rtt))
+    def _reward_function(self, instant_throughput, last_rtt,
+                         rtt_min, retransmissions):
+        eps = 0.005
+        b = 1 + last_rtt - rtt_min
+        a = math.log((eps + instant_throughput) / ((1 + retransmissions) * b))
         # b = (1 + math.log(goodput/current_ema_throughput))
         return a
 
     def _get_reward(self) -> float:
         reward = self._reward_function(
-            self.current_statistics[Parameters.EMA_THROUGHPUT],
-            self.current_statistics[Parameters.GOODPUT],
             self.current_statistics[Parameters.THROUGHPUT],
-            self.current_statistics[Parameters.SRTT],
+            self.current_statistics[Parameters.LAST_RTT],
             self.current_statistics[Parameters.MIN_RTT],
-            self.current_statistics[Parameters.EMA_RETRANSMISSIONS],
-            self.current_statistics[Parameters.CUMULATIVE_RETRANSMISSIONS]
+            self.current_statistics[Parameters.RETRANSMISSIONS]
         )
 
         self.episode_return += reward
@@ -189,7 +232,30 @@ class CongestionControlEnv(Env):
         logging.debug(f"TAKING ACTION {action}")
 
         # Bound to int64 range
-        return action if action < constants.CWND_UPPER_LIMIT else constants.CWND_UPPER_LIMIT
+        return action if action < constants.GRPC_FLOAT_UPPER_LIMIT else math.ceil(constants.GRPC_FLOAT_UPPER_LIMIT)
+
+    def _cwnd_update_cont(self, percentage) -> int:
+        action = math.floor(percentage * constants.CWND_UPPER_LIMIT_KB)
+        action = action * 1000
+        logging.debug(f"TAKING ACTION {action} with % {percentage}")
+        return action
+
+    def _cwnd_update_throttle(self, percentage) -> int:
+        action = math.ceil(self.current_statistics[Parameters.CURR_WINDOW_SIZE] + percentage * self.current_statistics[Parameters.CURR_WINDOW_SIZE])
+
+        action = action * 1000
+        if action < 1:
+            return 1
+        elif action > constants.CWND_UPPER_LIMIT_KB * 1000:
+            return constants.CWND_UPPER_LIMIT_KB * 1000
+        else:
+            return action
+
+    def _cleanup(self):
+        # You gotta clean your stuff sometimes
+        self.__del__()
+        self._state_queue = Queue()
+        self._action_queue = Queue()
 
     def report(self):
         logging.info(f"EPISODE {self.num_resets} COMPLETED")
@@ -200,44 +266,72 @@ class CongestionControlEnv(Env):
                      f"{self.current_statistics[Parameters.EMA_THROUGHPUT]}")
 
     def reset(self) -> GymObs:
-        # if self.num_resets >= 0:
         self.report()
 
         self.current_statistics = dict((param, 0.0) for param in Parameters)
-
         self.current_step = 0
         self.num_resets += 1
         self.episode_return = 0
         self.episode_start_time = time.time()
+        initial_state = np.array([self.current_statistics[Parameters(
+            x.value)] for x in State])
 
-        return self._next_observation()
+        return initial_state
 
-    def step(self, action: np.ndarray) -> GymStepReturn:
-        if self.current_step == 0:
-            logging.info(self.current_statistics)
+    def step(self, action) -> GymStepReturn:
+        info = {}
+        reward = 0
 
-        self._put_action(self._cwnd_update(action))
         self.current_step += 1
         self.total_steps += 1
-        self.action_delay = time.time() * 1000 - self.previous_timestamp
 
-        reward = self._get_reward()
-        info = {
-            'current_statistics': self.current_statistics,
-            'action': constants.ACTIONS[action],
-            'reward': reward,
-            'action_delay': self.action_delay,
-        }
-        done = False
-        if self.current_statistics[Parameters.FINISHED]:
-            done = True
-            self.episode_time = time.time() - self.episode_start_time
-            info['episode_time'] = self.episode_time
+        if self.current_step == 1:
+            logging.info(self.current_statistics)
+            self._run_grpc_server(self.grpc_port)
+            self._run_mockets_client(self._mockets_server_ip, self.grpc_port)
+
+        else:
+            if self.continuos_actions:
+                if self.continuos_throttle:
+                    cwnd_value = self._cwnd_update_throttle(action[0])
+                else:
+                    cwnd_value = self._cwnd_update_cont(action[0])
+            else:
+                cwnd_value = self._cwnd_update(action)
+
+            # Handle timeout to let the episode finish asap
+            if self.current_step == self._max_number_of_steps or \
+                    self.n_timestep == self.total_steps:
+                logging.info("TIMEOUT STEPS EXPIRED")
+                info['TimeLimit.truncated'] = True
+                self._put_action(constants.CWND_UPPER_LIMIT_KB * 1000)
+            else:
+                # CWND value must be in Bytes
+                self._put_action(cwnd_value)
+
+            self.action_delay = time.time() * 1000 - self.previous_timestamp
+            reward = self._get_reward()
+
+            info = {
+                'current_statistics': self.current_statistics,
+                'action': action[0] if self.continuos_actions else action,
+                'reward': reward,
+                'action_delay': self.action_delay,
+            }
 
         observation = self._next_observation()
 
-        if done:
+        done = False
+        if self.current_statistics[Parameters.FINISHED] or \
+                self.n_timestep == self.total_steps or \
+                self.current_step == self._max_number_of_steps:
+            logging.info("Cleaning up, waiting for communication to end...")
+            self._cleanup()
+            self.episode_time = time.time() - self.episode_start_time
+            info['episode_time'] = self.episode_time
             logging.info(f"Done - Stats: {self.current_statistics}")
+            done = True
+
         return observation, reward, done, info
 
     def render(self, mode: str = "console") -> None:
