@@ -2,11 +2,11 @@ from typing import Union, Optional
 
 import gym
 import optuna
-from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
+from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import TensorBoardOutputFormat
 from stable_baselines3.common.vec_env import VecEnv
 
-from constants import Parameters, ACTIONS
+from envs.utils.constants import Parameters
 from stable_baselines3.common.callbacks import EvalCallback
 import time
 

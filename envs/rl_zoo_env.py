@@ -1,4 +1,3 @@
-import os
 import time
 from multiprocessing import Queue, Process
 import numpy as np
@@ -9,9 +8,9 @@ from gym.spaces import Box, Discrete
 from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 
 import data_processing_server.congestion_control_server as cc_server
-import constants
+from envs.utils import constants
 import math
-from constants import Parameters, State
+from envs.utils.constants import Parameters, State
 import subprocess
 
 logging.basicConfig(level=logging.INFO)
@@ -34,11 +33,11 @@ def ema_throughput(current_ema_throughput: float, current_throughput: float,
 
 
 def mockets_gradlew_args_call(mockets_server_ip: str, grpc_port: int):
-    return ['/home/user/jmockets/gradlew',
+    return ['/code/jmockets/gradlew',
             ':examples:runCCTrainingClient',
             f"--args=-ip {mockets_server_ip} --grpc-server localhost:{grpc_port}",
             '-p',
-            '/home/user/jmockets']
+            '/code/jmockets']
 
 
 def mockets_dist_args_call(mockets_server_ip: str, grpc_port: int):
@@ -125,10 +124,10 @@ class CongestionControlEnv(Env):
             self._state_queue.close()
 
     def _run_mockets_client(self, mockets_server_address, grpc_port):
-        self._mocket_process = subprocess.Popen(mockets_dist_args_call(
+        self._mocket_process = subprocess.Popen(mockets_gradlew_args_call(
             mockets_server_address,
             grpc_port
-        ), stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        ), stderr=subprocess.STDOUT)
         self._mocket_process.daemon = True
 
     def _run_grpc_server(self, port: int):
@@ -232,7 +231,8 @@ class CongestionControlEnv(Env):
         logging.debug(f"TAKING ACTION {action}")
 
         # Bound to int64 range
-        return action if action < constants.GRPC_FLOAT_UPPER_LIMIT else math.ceil(constants.GRPC_FLOAT_UPPER_LIMIT)
+        return action if action < constants.GRPC_FLOAT_UPPER_LIMIT else math.ceil(
+            constants.GRPC_FLOAT_UPPER_LIMIT)
 
     def _cwnd_update_cont(self, percentage) -> int:
         action = math.floor(percentage * constants.CWND_UPPER_LIMIT_KB)

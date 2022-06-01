@@ -8,9 +8,9 @@ from gym.spaces import Box, Discrete
 from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 
 import data_processing_server.congestion_control_server as cc_server
-import constants
+from envs.utils import constants
 import math
-from constants import Parameters, State
+from envs.utils.constants import Parameters, State
 
 logging.basicConfig(level=logging.INFO)
 

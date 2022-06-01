@@ -1,16 +1,14 @@
 """Implementation of the Congestion Control Server"""
 
 from __future__ import print_function
-import os
-import queue
 import asyncio
 import logging
-from typing import AsyncIterable, Optional, Union
+from typing import AsyncIterable
 
 import grpc
 from protos import congestion_control_pb2, congestion_control_pb2_grpc
 from multiprocessing import Queue
-from constants import Parameters
+from envs.utils.constants import Parameters
 
 
 class CongestionControlService(congestion_control_pb2_grpc.
