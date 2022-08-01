@@ -95,4 +95,5 @@ ALPHA = 1 / 8  # Alfa for Smoother RTT calc
 BETA = 1 / 4  # Beta for RTT Var
 GRPC_FLOAT_UPPER_LIMIT = 9223372036854775807
 STARTING_WINDOW_SIZE_KB = 4.0
-CWND_UPPER_LIMIT_KB = 10000
+CWND_UPPER_LIMIT_BYTES = 400000
+DIST_PATH = '/code/marlin/mockets_distributions/'

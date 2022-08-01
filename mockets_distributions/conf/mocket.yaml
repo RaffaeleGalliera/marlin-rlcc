@@ -1,0 +1,18 @@
+shutdownTimeout: 1000
+mtu: 1400
+connectionLingerTime: 1000
+handshakeTimeout: 30000
+rcvTimeout: 10000
+sackTransmitTimeout: 10
+keepAliveTimeout: 500
+initAssumedRTT: 100
+maxRTO: 3000
+minRTO: 150
+enableLogOnFile: false
+statusNotifierDestination:
+  ip: 127.0.0.1
+  port: 1400
+  deliveryTime: 5000
+statusNotifierDeliveryTime: 2000
+# Bps
+transmitRateModulationLimit: 700_000
