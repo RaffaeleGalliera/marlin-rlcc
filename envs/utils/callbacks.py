@@ -60,6 +60,8 @@ class TrainingCallback(BaseCallback):
                         'current_statistics'][Parameters.GOODPUT],
                     "training/observations/rtt_ms": info[
                         'current_statistics'][Parameters.LAST_RTT],
+                    "training/observations/srtt": info[
+                        'current_statistics'][Parameters.SRTT],
                     "training/observations/retransmissions": info[
                         'current_statistics'][Parameters.RETRANSMISSIONS],
                     "training/observations/ema_retransmissions": info[

@@ -1,0 +1,16 @@
+!!python/object/apply:collections.OrderedDict
+- - - callback
+    - - envs.utils.callbacks.TrainingCallback
+  - - env_wrapper
+    - - utils.wrappers.HistoryWrapper:
+          horizon: 10
+  - - learning_starts
+    - 10000
+  - - n_timesteps
+    - 500000.0
+  - - normalize
+    - '{''norm_obs'': True, ''norm_reward'': False}'
+  - - policy
+    - MlpPolicy
+  - - policy_kwargs
+    - dict(net_arch=[400, 300])

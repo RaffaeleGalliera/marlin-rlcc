@@ -7,12 +7,7 @@ sackTransmitTimeout: 10
 keepAliveTimeout: 500
 initAssumedRTT: 100
 maxRTO: 3000
-minRTO: 150
+minRTO: 300
 enableLogOnFile: false
-statusNotifierDestination:
-  ip: 127.0.0.1
-  port: 1400
-  deliveryTime: 5000
-statusNotifierDeliveryTime: 2000
 # Bps
-transmitRateModulationLimit: 700_000
+transmitRateModulationLimit: 220

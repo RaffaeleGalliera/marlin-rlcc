@@ -14,7 +14,7 @@ from envs.utils.constants import Parameters, State
 import subprocess
 import paramiko
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 def writable_bytes(cwnd: float, inflight_bytes: float) -> float:
@@ -65,6 +65,7 @@ def _reward_function(instant_throughput, last_rtt,
     eps = 0.005
     b = 1 + last_rtt - rtt_min
     th = math.log((eps + instant_throughput))
+    # th = math.log((eps + instant_goodput))
     penalties = math.log((1 + retransmissions) * b)
     # b = (1 + math.log(goodput/current_ema_throughput))
     return th - penalties
@@ -108,8 +109,14 @@ class CongestionControlEnv(Env):
 
         self._mockets_server_ip = mocket_server_ip
         self.grpc_port = grpc_port
+
         self.ssh_traffic_gen = paramiko.SSHClient()
         self.ssh_traffic_gen.set_missing_host_key_policy(
+            paramiko.AutoAddPolicy())
+
+        self.ssh_mockets_server = paramiko.SSHClient()
+        self.ssh_server_stdout = None
+        self.ssh_mockets_server.set_missing_host_key_policy(
             paramiko.AutoAddPolicy())
 
         # Run server in a different process
@@ -143,9 +150,19 @@ class CongestionControlEnv(Env):
             logging.info("Closing Background traffic gen")
             self.ssh_traffic_gen.close()
 
+            logging.info("Closing Mockets Server instance")
+            self.ssh_mockets_server.close()
+
+            logging.info("Saving Mockets Server log")
+            with open(f"mockets_log/server/mockets_server_"
+                      f"ep{self.num_resets}.log",
+                      "w+") as log:
+                for line in self.ssh_server_stdout.readlines():
+                    log.write(str(line))
+
     def _run_mockets_client(self, mockets_server_address, grpc_port,
                             mockets_logfile):
-        self._mocket_process = subprocess.Popen(mockets_gradlew_args(
+        self._mocket_process = subprocess.Popen(mockets_dist_args(
             mockets_server_address,
             grpc_port,
             self._is_testing
@@ -197,6 +214,9 @@ class CongestionControlEnv(Env):
         # Return Timestamp in Seconds
         return self.current_statistics[Parameters.TIMESTAMP]
 
+    def _is_finished(self):
+        return self.current_statistics[Parameters.FINISHED]
+
     def _get_state(self) -> np.array:
         logging.debug("FETCHING STATE..")
 
@@ -239,7 +259,9 @@ class CongestionControlEnv(Env):
     # New CWND by throttle action
     def _cwnd_update_throttle(self, percentage) -> int:
         # New CWND in Bytes
-        cwnd = math.ceil(self.current_statistics[Parameters.CURR_WINDOW_SIZE] + percentage * self.current_statistics[Parameters.CURR_WINDOW_SIZE]) * 1000
+        cwnd = math.ceil(self.current_statistics[Parameters.CURR_WINDOW_SIZE]
+                         + percentage *
+                         self.current_statistics[Parameters.CURR_WINDOW_SIZE]) * 1000
         if cwnd < 1:
             return 1
         elif cwnd > constants.GRPC_FLOAT_UPPER_LIMIT:
@@ -251,23 +273,33 @@ class CongestionControlEnv(Env):
         return self.current_step == self._max_number_of_steps or self.n_timestep == self.total_steps
 
     def _run_grpc_and_mockets(self):
-        logging.info(self.current_statistics)
         self._run_grpc_server(self.grpc_port)
-        with open('mockets.log', "w") as log:
+        with open(f"mockets_log/client/mockets_client_ep{self.num_resets}.log", "w") as log:
             self._run_mockets_client(self._mockets_server_ip,
                                      self.grpc_port,
                                      mockets_logfile=log)
 
+    def _run_mockets_server(self):
+        logging.info("Connecting to Mockets Server host machine")
+        self.ssh_mockets_server.connect("192.168.1.17", username="raffaele",
+                                        password="armageddon12345")
+
+        logging.info("Launching Mockets Server...")
+        ssh_stdin, self.ssh_server_stdout, ssh_stderr = \
+            self.ssh_mockets_server.exec_command(
+            "/Users/raffaele/Documents/IHMC/jmockets/examples/build"
+            "/distributions/examples/bin/examples -ip 0.0.0.0",
+            get_pty=True)
+
     def _start_background_traffic(self):
         logging.info("Connecting to sender host for background traffic")
-        self.ssh_traffic_gen.connect("192.168.1.40", username="marlin",
+        self.ssh_traffic_gen.connect("192.168.2.40", username="marlin",
                                      password="nomads")
 
         logging.info("Starting Background traffic")
-        ssh_stdin, ssh_tdou, sshstderr = self.ssh_traffic_gen.exec_command(
+        ssh_stdin, ssh_stdout, ssh_stderr = self.ssh_traffic_gen.exec_command(
             "mgen inpuT /home/marlin/Muddasar-MGN/evaluation_generator_100MB.mgen",
             get_pty=True)
-
 
     def _cleanup(self):
         # You gotta clean your stuff sometimes
@@ -306,9 +338,11 @@ class CongestionControlEnv(Env):
         self.total_steps += 1
 
         if self.current_step == 1:
+            logging.info(self.current_statistics)
             self._run_grpc_and_mockets()
+            self._run_mockets_server()
             # if self._is_testing:
-                # self._start_background_traffic()
+            #     self._start_background_traffic()
 
         else:
             cwnd_value = self._cwnd_update_throttle(action[0])
@@ -319,9 +353,9 @@ class CongestionControlEnv(Env):
                 self._put_action(constants.CWND_UPPER_LIMIT_BYTES)
             else:
                 # CWND value must be in Bytes
-                # self._put_action(cwnd_value)
-                self._put_action(364380)
-
+                self._put_action(cwnd_value)
+                # self._put_action(11386)
+                # self._put_action(100000)
             # Action delay in ms
             self.action_delay = (time.time() - self.previous_timestamp) * 1000
             reward = self._get_reward()
@@ -337,7 +371,7 @@ class CongestionControlEnv(Env):
         observation = self._next_observation()
 
         done = False
-        if self.current_statistics[Parameters.FINISHED] or self._has_reached_steps_limits():
+        if self._is_finished() or self._has_reached_steps_limits():
             logging.info("Cleaning up, waiting for communication to end...")
             self._cleanup()
             self.episode_time = time.time() - self.episode_start_time
