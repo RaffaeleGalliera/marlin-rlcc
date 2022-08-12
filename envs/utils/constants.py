@@ -20,22 +20,14 @@ class Parameters(Enum):
     EMA_RETRANSMISSIONS = 10
     WRITABLE_BYTES = 11
 
-    # Other Params
+    LAST_RTT = 12
+    MIN_RTT = 13
+    MAX_RTT = 14
+    SRTT = 15
+    VAR_RTT = 16
 
-    THROUGHPUT = 12
-    GOODPUT = 13
-    EMA_THROUGHPUT = 14
-    EMA_GOODPUT= 15
-
-    LAST_RTT = 16
-    MIN_RTT = 17
-    MAX_RTT = 18
-    SRTT = 19
-    VAR_RTT = 20
-
-    TIMESTAMP = 21
-    FINISHED = 22
-
+    TIMESTAMP = 17
+    FINISHED = 18
 
 class State(Enum):
     # From Mockets
@@ -52,17 +44,19 @@ class State(Enum):
     RETRANSMISSIONS = 9
     EMA_RETRANSMISSIONS = 10
 
-    # Other Params
-    THROUGHPUT = 12
-    GOODPUT = 13
-    EMA_THROUGHPUT = 14
-    EMA_GOODPUT = 15
+    LAST_RTT = 12
+    MIN_RTT = 13
+    MAX_RTT = 14
+    SRTT = 15
+    VAR_RTT = 16
 
-    LAST_RTT = 16
-    MIN_RTT = 17
-    MAX_RTT = 18
-    SRTT = 19
-    VAR_RTT = 20
+    # Other Params
+    THROUGHPUT = 99
+    GOODPUT = 98
+    EMA_THROUGHPUT = 97
+    EMA_GOODPUT = 96
+
+    PACKETS_TRANSMITTED = 95
 
 
 # TODO: 'rtt_standing',  # Min RTT over
@@ -96,4 +90,5 @@ BETA = 1 / 4  # Beta for RTT Var
 GRPC_FLOAT_UPPER_LIMIT = 100000
 STARTING_WINDOW_SIZE_KB = 4.0
 CWND_UPPER_LIMIT_BYTES = 25000
+PACKET_SIZE_KB = 1.024
 DIST_PATH = '/code/marlin/mockets_distributions'

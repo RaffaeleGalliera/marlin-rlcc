@@ -6,7 +6,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import TensorBoardOutputFormat
 from stable_baselines3.common.vec_env import VecEnv
 
-from envs.utils.constants import Parameters
+from envs.utils.constants import State
 from stable_baselines3.common.callbacks import EvalCallback
 import time
 
@@ -30,6 +30,7 @@ class TrainingCallback(BaseCallback):
         self._retransmissions_sum = 0
         self._cwnd_sum = 0
         self._delay_sum = 0
+        self._packets_sum = 0
 
         self._start_time = time.time()
 
@@ -46,28 +47,31 @@ class TrainingCallback(BaseCallback):
 
         for info in self.locals["infos"]:
             if 'current_statistics' in info:
-                self._throughput_sum +=info['current_statistics'][Parameters.THROUGHPUT]
-                self._goodput_sum += info['current_statistics'][Parameters.GOODPUT]
-                self._rtt_sum += info['current_statistics'][Parameters.LAST_RTT]
-                self._retransmissions_sum += info['current_statistics'][Parameters.RETRANSMISSIONS]
-                self._cwnd_sum += info['current_statistics'][Parameters.CURR_WINDOW_SIZE]
+                self._throughput_sum +=info['current_statistics'][State.THROUGHPUT]
+                self._goodput_sum += info['current_statistics'][State.GOODPUT]
+                self._rtt_sum += info['current_statistics'][State.LAST_RTT]
+                self._retransmissions_sum += info['current_statistics'][State.RETRANSMISSIONS]
+                self._cwnd_sum += info['current_statistics'][State.CURR_WINDOW_SIZE]
+                self._packets_sum += info['current_statistics'][State.PACKETS_TRANSMITTED]
                 self._delay_sum += info['action_delay']
 
                 step_logger = {
                     "training/observations/throughput_KB": info[
-                        'current_statistics'][Parameters.THROUGHPUT],
+                        'current_statistics'][State.THROUGHPUT],
                     "training/observations/goodput_KB": info[
-                        'current_statistics'][Parameters.GOODPUT],
+                        'current_statistics'][State.GOODPUT],
                     "training/observations/rtt_ms": info[
-                        'current_statistics'][Parameters.LAST_RTT],
+                        'current_statistics'][State.LAST_RTT],
                     "training/observations/srtt": info[
-                        'current_statistics'][Parameters.SRTT],
+                        'current_statistics'][State.SRTT],
                     "training/observations/retransmissions": info[
-                        'current_statistics'][Parameters.RETRANSMISSIONS],
+                        'current_statistics'][State.RETRANSMISSIONS],
                     "training/observations/ema_retransmissions": info[
-                        'current_statistics'][Parameters.EMA_RETRANSMISSIONS],
+                        'current_statistics'][State.EMA_RETRANSMISSIONS],
                     "training/observations/current_window_size_KB": info[
-                        'current_statistics'][Parameters.CURR_WINDOW_SIZE],
+                        'current_statistics'][State.CURR_WINDOW_SIZE],
+                    "training/observations/packet_transmitted": info[
+                        'current_statistics'][State.PACKETS_TRANSMITTED],
                     'training/action': info['action'],
                     'training/action_delay_ms': info['action_delay'],
                     'training/rewards': info['reward']
@@ -83,6 +87,7 @@ class TrainingCallback(BaseCallback):
                 avg_episodic_goodput = self._goodput_sum/info["episode"]["l"]
                 avg_episodic_rtt = self._rtt_sum/info["episode"]["l"]
                 avg_episodic_retransmissions = self._retransmissions_sum/info["episode"]["l"]
+                avg_episodic_packet_transmitted = self._packets_sum/info["episode"]["l"]
                 avg_window_size = self._cwnd_sum/info["episode"]["l"]
                 avg_delay = self._delay_sum/info["episode"]["l"]
 
@@ -97,6 +102,8 @@ class TrainingCallback(BaseCallback):
                     "training/rollouts/episodic_avg_retransmissions":avg_episodic_retransmissions,
                     "training/rollouts/episodic_window_size_KB":
                         avg_window_size,
+                    "training/rollouts/episodic_packets_transmitted":
+                        avg_episodic_packet_transmitted,
                     "training/rollouts/avg_delay_ms": avg_delay
                 }
 
@@ -109,6 +116,7 @@ class TrainingCallback(BaseCallback):
                 self._retransmissions_sum = 0
                 self._cwnd_sum = 0
                 self._delay_sum = 0
+                self._packets_sum = 0
 
                 exclude_dict = {key: None for key in logger_dict.keys()}
                 self._tensorboard_writer.write(logger_dict, exclude_dict, self._episode_counter)
