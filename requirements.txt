@@ -4,3 +4,6 @@ numpy
 stable-baselines3
 pytest
 wandb
+seaborn
+paramiko
+scp
