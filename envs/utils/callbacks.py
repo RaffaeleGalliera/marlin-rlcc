@@ -32,8 +32,6 @@ class TrainingCallback(BaseCallback):
         self._delay_sum = 0
         self._packets_sum = 0
 
-        self._start_time = time.time()
-
         self._tensorboard_writer = None
 
     def _init_callback(self) -> None:
@@ -66,8 +64,6 @@ class TrainingCallback(BaseCallback):
                         'current_statistics'][State.SRTT],
                     "training/observations/retransmissions": info[
                         'current_statistics'][State.RETRANSMISSIONS],
-                    "training/observations/ema_retransmissions": info[
-                        'current_statistics'][State.EMA_RETRANSMISSIONS],
                     "training/observations/current_window_size_KB": info[
                         'current_statistics'][State.CURR_WINDOW_SIZE],
                     "training/observations/packet_transmitted": info[
