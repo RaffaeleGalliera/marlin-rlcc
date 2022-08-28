@@ -157,11 +157,11 @@ def reward_v4(good_inst, rtt_diff, retransmissions, rtt_min_ema):
 
     penalties = 0
 
-    if abs(rtt_diff/rtt_min_ema + 1) > 0.6:
+    if abs(rtt_diff/(rtt_min_ema + 1)) > 0.6:
         beta = 1
-    elif 0.1 < abs(rtt_diff/rtt_min_ema + 1) <= 0.6:
+    elif 0.1 < abs(rtt_diff/(rtt_min_ema + 1)) <= 0.6:
         beta = 0.5
-    elif 0.03 < abs(rtt_diff/rtt_min_ema + 1) <= 0.1:
+    elif 0.03 < abs(rtt_diff/(rtt_min_ema + 1)) <= 0.1:
         beta = 0.3
     else:
         beta = 0.1
@@ -418,7 +418,8 @@ class CongestionControlEnv(Env):
 
     def _run_grpc_and_mockets(self):
         self._run_grpc_server(self.grpc_port)
-        with open(f"mockets_log/client/mockets_client_ep{self.num_resets}.log", "w") as log:
+        with open(f"mockets_log/client/mockets_client_ep"
+                  f"{self.num_resets}.log", "w+") as log:
             self._run_mockets_client(self._mockets_server_ip,
                                      self.grpc_port,
                                      mockets_logfile=log)
