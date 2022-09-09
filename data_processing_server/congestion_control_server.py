@@ -53,6 +53,8 @@ class CongestionControlService(congestion_control_pb2_grpc.
             parameter[Parameters.TIMESTAMP] = status.timestamp
             parameter[Parameters.FINISHED] = status.finished
 
+            parameter[Parameters.ACKED_BYTES_TIMEFRAME] = status.acked_bytes_timeframe
+
             # Put in queue, note that queue is infinite aka doesn't block
             self._state_queue.put(parameter)
 

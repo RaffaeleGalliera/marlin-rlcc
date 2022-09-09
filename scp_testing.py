@@ -51,6 +51,8 @@ for x in range(0, 10):
         "mgen inpuT /home/nomads/Muddasar-mgen/receiver.mgen nolog",
         get_pty=True)
 
+    time.sleep(1)
+
     logging.info("Launching Traffic gen script")
     ssh_traffic_gen.exec_command(
         "/Users/raffaele/Documents/IHMC/mgen/makefiles/mgen inpuT "

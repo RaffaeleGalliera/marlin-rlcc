@@ -31,6 +31,7 @@ class TrainingCallback(BaseCallback):
         self._cwnd_sum = 0
         self._delay_sum = 0
         self._packets_sum = 0
+        self._acked_bytes_sum = 0
 
         self._tensorboard_writer = None
 
@@ -52,6 +53,7 @@ class TrainingCallback(BaseCallback):
                 self._cwnd_sum += info['current_statistics'][State.CURR_WINDOW_SIZE]
                 self._packets_sum += info['current_statistics'][State.PACKETS_TRANSMITTED]
                 self._delay_sum += info['action_delay']
+                self._acked_bytes_sum += info['current_statistics'][State.ACKED_BYTES_TIMEFRAME]
 
                 step_logger = {
                     "training/observations/throughput_KB": info[
@@ -68,6 +70,8 @@ class TrainingCallback(BaseCallback):
                         'current_statistics'][State.CURR_WINDOW_SIZE],
                     "training/observations/packet_transmitted": info[
                         'current_statistics'][State.PACKETS_TRANSMITTED],
+                    "training/observations/acked_bytes": info[
+                        'current_statistics'][State.ACKED_BYTES_TIMEFRAME],
                     'training/action': info['action'],
                     'training/action_delay_ms': info['action_delay'],
                     'training/rewards': info['reward']
@@ -86,6 +90,8 @@ class TrainingCallback(BaseCallback):
                 avg_episodic_packet_transmitted = self._packets_sum/info["episode"]["l"]
                 avg_window_size = self._cwnd_sum/info["episode"]["l"]
                 avg_delay = self._delay_sum/info["episode"]["l"]
+                avg_episodic_acked_bytes = self._acked_bytes_sum/info[
+                    "episode"]["l"]
 
                 logger_dict = {
                     "training/rollouts/episodic_return": info["episode"]["r"],
@@ -100,6 +106,8 @@ class TrainingCallback(BaseCallback):
                         avg_window_size,
                     "training/rollouts/episodic_packets_transmitted":
                         avg_episodic_packet_transmitted,
+                    "training/rollouts/episodic_acked_bytes":
+                        avg_episodic_acked_bytes,
                     "training/rollouts/avg_delay_ms": avg_delay
                 }
 
@@ -113,6 +121,7 @@ class TrainingCallback(BaseCallback):
                 self._cwnd_sum = 0
                 self._delay_sum = 0
                 self._packets_sum = 0
+                self._acked_bytes_sum = 0
 
                 exclude_dict = {key: None for key in logger_dict.keys()}
                 self._tensorboard_writer.write(logger_dict, exclude_dict, self._episode_counter)

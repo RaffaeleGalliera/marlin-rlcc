@@ -36,6 +36,8 @@ message CommunicationState {
 
     int64 timestamp = 16;
     bool finished = 17;
+
+    double acked_bytes_timeframe = 18;
 }
 
 // Actions represent the CongestionWindow update to be performed

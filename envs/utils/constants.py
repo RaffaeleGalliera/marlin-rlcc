@@ -29,6 +29,8 @@ class Parameters(Enum):
     TIMESTAMP = 17
     FINISHED = 18
 
+    ACKED_BYTES_TIMEFRAME = 19
+
 
 class Statistic(Enum):
     LAST = 1
@@ -55,6 +57,8 @@ class State(Enum):
     MAX_RTT = 14
     SRTT = 15
     VAR_RTT = 16
+
+    ACKED_BYTES_TIMEFRAME = 19
 
     # Other Params
     THROUGHPUT = 101
