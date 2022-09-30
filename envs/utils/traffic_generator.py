@@ -1,14 +1,15 @@
 import random
 import logging
 
+
 class TrafficPattern:
     def __init__(self,
                  packets: float,
-                 type: str,
+                 protocol: str,
                  port: int,
                  ):
         self.packets = packets
-        self.type = type
+        self.protocol = protocol
         self.port = port
 
 
@@ -52,30 +53,30 @@ class TrafficGenerator:
 
     def generate_script(self, chosen_list):
         logging.info("Traffic Order")
-        logging.info([f"{pattern.type} - {pattern.packets}" for pattern in chosen_list])
+        logging.info([f"{pattern.protocol} - {pattern.packets}" for pattern in chosen_list])
 
-        slot_0 = f"0.0 ON 1 {chosen_list[0].type} SRC {chosen_list[0].port} " \
+        slot_0 = f"0.0 ON 1 {chosen_list[0].protocol} SRC {chosen_list[0].port} " \
                  f"DST " \
                  f"192.168.1.40/{chosen_list[0].port} BURST [" \
                  f"REGULAR " \
                  f"8.0 PERIODIC [{chosen_list[0].packets} 1024] FIXED 2.0] " \
                  f"TTL 64"
 
-        slot_1 = f"2.0 ON 2 {chosen_list[1].type} SRC {chosen_list[1].port} " \
+        slot_1 = f"2.0 ON 2 {chosen_list[1].protocol} SRC {chosen_list[1].port} " \
                  f"DST " \
                  f"192.168.1.40/{chosen_list[1].port} BURST [" \
                  f"REGULAR " \
                  f"8.0 PERIODIC [{chosen_list[1].packets} 1024] FIXED 2.0] " \
                  f"TTL 64"
 
-        slot_2 = f"4.0 ON 3 {chosen_list[2].type} SRC {chosen_list[2].port} " \
+        slot_2 = f"4.0 ON 3 {chosen_list[2].protocol} SRC {chosen_list[2].port} " \
                  f"DST " \
                  f"192.168.1.40/{chosen_list[2].port} BURST [" \
                  f"REGULAR " \
                  f"8.0 PERIODIC [{chosen_list[2].packets} 1024] FIXED 2.0] " \
                  f"TTL 64"
 
-        slot_3 = f"6.0 ON 4 {chosen_list[3].type} SRC {chosen_list[3].port} " \
+        slot_3 = f"6.0 ON 4 {chosen_list[3].protocol} SRC {chosen_list[3].port} " \
                  f"DST " \
                  f"192.168.1.40/{chosen_list[3].port} BURST [" \
                  f"REGULAR " \
