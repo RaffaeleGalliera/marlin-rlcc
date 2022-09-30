@@ -30,8 +30,6 @@ class TrainingCallback(BaseCallback):
         self._retransmissions_sum = 0
         self._cwnd_sum = 0
         self._delay_sum = 0
-        self._packets_sum = 0
-        self._acked_bytes_sum = 0
 
         self._tensorboard_writer = None
 
@@ -51,9 +49,7 @@ class TrainingCallback(BaseCallback):
                 self._rtt_sum += info['current_statistics'][State.LAST_RTT]
                 self._retransmissions_sum += info['current_statistics'][State.RETRANSMISSIONS]
                 self._cwnd_sum += info['current_statistics'][State.CURR_WINDOW_SIZE]
-                self._packets_sum += info['current_statistics'][State.PACKETS_TRANSMITTED]
                 self._delay_sum += info['action_delay']
-                self._acked_bytes_sum += info['current_statistics'][State.ACKED_BYTES_TIMEFRAME]
 
                 step_logger = {
                     "training/observations/throughput_KB": info[
@@ -62,16 +58,10 @@ class TrainingCallback(BaseCallback):
                         'current_statistics'][State.GOODPUT],
                     "training/observations/rtt_ms": info[
                         'current_statistics'][State.LAST_RTT],
-                    "training/observations/srtt": info[
-                        'current_statistics'][State.SRTT],
                     "training/observations/retransmissions": info[
                         'current_statistics'][State.RETRANSMISSIONS],
                     "training/observations/current_window_size_KB": info[
                         'current_statistics'][State.CURR_WINDOW_SIZE],
-                    "training/observations/packet_transmitted": info[
-                        'current_statistics'][State.PACKETS_TRANSMITTED],
-                    "training/observations/acked_bytes": info[
-                        'current_statistics'][State.ACKED_BYTES_TIMEFRAME],
                     'training/action': info['action'],
                     'training/action_delay_ms': info['action_delay'],
                     'training/rewards': info['reward']
@@ -87,11 +77,8 @@ class TrainingCallback(BaseCallback):
                 avg_episodic_goodput = self._goodput_sum/info["episode"]["l"]
                 avg_episodic_rtt = self._rtt_sum/info["episode"]["l"]
                 avg_episodic_retransmissions = self._retransmissions_sum/info["episode"]["l"]
-                avg_episodic_packet_transmitted = self._packets_sum/info["episode"]["l"]
                 avg_window_size = self._cwnd_sum/info["episode"]["l"]
                 avg_delay = self._delay_sum/info["episode"]["l"]
-                avg_episodic_acked_bytes = self._acked_bytes_sum/info[
-                    "episode"]["l"]
 
                 logger_dict = {
                     "training/rollouts/episodic_return": info["episode"]["r"],
@@ -104,15 +91,9 @@ class TrainingCallback(BaseCallback):
                     "training/rollouts/episodic_avg_retransmissions":avg_episodic_retransmissions,
                     "training/rollouts/episodic_window_size_KB":
                         avg_window_size,
-                    "training/rollouts/episodic_packets_transmitted":
-                        avg_episodic_packet_transmitted,
-                    "training/rollouts/episodic_acked_bytes":
-                        avg_episodic_acked_bytes,
-                    "training/rollouts/avg_delay_ms": avg_delay
+                    "training/rollouts/avg_delay_ms": avg_delay,
+                    "training/rollouts/time_taken": time.time() - info['start_time']
                 }
-
-                if 'episode_time' in info:
-                    logger_dict["training/rollouts/time_taken"] = info['episode_time']
 
                 self._throughput_sum = 0
                 self._goodput_sum = 0
@@ -120,8 +101,6 @@ class TrainingCallback(BaseCallback):
                 self._retransmissions_sum = 0
                 self._cwnd_sum = 0
                 self._delay_sum = 0
-                self._packets_sum = 0
-                self._acked_bytes_sum = 0
 
                 exclude_dict = {key: None for key in logger_dict.keys()}
                 self._tensorboard_writer.write(logger_dict, exclude_dict, self._episode_counter)

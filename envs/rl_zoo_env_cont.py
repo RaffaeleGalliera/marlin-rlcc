@@ -274,19 +274,19 @@ def reward_v7(real_goodput, rtt_diff, retransmissions, rtt_min_ema, current_traf
 
 
 def reward_v8(real_goodput, rtt_diff, retransmissions, rtt_min_ema, current_traffic_patterns, traffic_timer, packets_transmitted):
-    # elapsed_time_in_period = int(time.time() - traffic_timer) % 8
-    # target = constants.LINK_BANDWIDTH_KB - 20
-    #
-    # if 0 < elapsed_time_in_period < 2:
-    #     target = target - current_traffic_patterns[0].packets
-    # elif 2 < elapsed_time_in_period < 4:
-    #     target = target - current_traffic_patterns[1].packets
-    # elif 4 < elapsed_time_in_period < 6:
-    #     target = target - current_traffic_patterns[2].packets
-    # elif 6 < elapsed_time_in_period < 8:
-    #     target = target - current_traffic_patterns[3].packets
+    elapsed_time_in_period = int(time.time() - traffic_timer) % 8
+    target = constants.LINK_BANDWIDTH_KB - 20
 
-    bonus = (real_goodput/constants.LINK_BANDWIDTH_KB)
+    if 0 < elapsed_time_in_period < 2:
+        target = target - current_traffic_patterns[0].packets
+    elif 2 < elapsed_time_in_period < 4:
+        target = target - current_traffic_patterns[1].packets
+    elif 4 < elapsed_time_in_period < 6:
+        target = target - current_traffic_patterns[2].packets
+    elif 6 < elapsed_time_in_period < 8:
+        target = target - current_traffic_patterns[3].packets
+
+    bonus = (real_goodput/target)
 
     if abs(rtt_diff/(rtt_min_ema + 1)) > 0.6:
         beta = 1
@@ -314,10 +314,8 @@ class CongestionControlEnv(Env):
                  traffic_receiver_ip: str = "192.168.1.40",
                  grpc_port: int = 50051,
                  observation_length: int = len(State) * len(Statistic),
-                 max_number_of_steps_per_episode: int = 500,
                  is_testing: bool = False,
-                 max_duration: int = 500,
-                 enable_truncated_flag: bool = False):
+                 max_duration: int = 500):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -374,7 +372,6 @@ class CongestionControlEnv(Env):
         self._server_process = None
         self._mocket_process = None
 
-        self._max_number_of_steps_per_episode = max_number_of_steps_per_episode
         self._is_testing = is_testing
         self._max_duration = max_duration
 
@@ -384,10 +381,6 @@ class CongestionControlEnv(Env):
         self.episode_evaluation_script = self.traffic_generator.generate_evaluation_script()
 
         self.traffic_script = None
-
-
-        # Set to true to bootstrap from previous episode when timeout is reached
-        self.enable_truncated_flag = enable_truncated_flag
 
         # self.reset()
 
@@ -513,19 +506,14 @@ class CongestionControlEnv(Env):
             self._process_additional_params()
             self.previous_timestamp = timestamp
 
-            logging.debug(f"STATE RECEIVED WITH DELAY: "
-                     f"{(time.time() - timestamp) * constants.UNIT_FACTOR}ms")
-
             logging.debug(f"STATE: {self.state_statistics}")
         else:
             logging.debug("SKIPPING STATE FETCH")
 
-        self.state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
-                               for param in State for stat in Statistic])
+        return np.array([self.state_statistics[State(param.value)][Statistic(
+            stat.value)] for param in State for stat in Statistic])
 
-        return self.state
-
-    def _next_observation(self) -> np.array:
+    def _next_state(self) -> np.array:
         return self._get_state()
 
     def _put_action(self, action):
@@ -563,11 +551,7 @@ class CongestionControlEnv(Env):
         else:
             return cwnd
 
-    def _has_reached_steps_limits(self):
-        return self.current_step == self._max_number_of_steps_per_episode
-
-    def _run_grpc_and_mockets(self):
-        self._run_grpc_server(self.grpc_port)
+    def _run_mockets_ep_client(self):
         with open(f"mockets_log/client/mockets_client_ep"
                   f"{self.num_resets}.log", "w+") as log:
             self._run_mockets_client(self._mockets_server_ip,
@@ -624,6 +608,7 @@ class CongestionControlEnv(Env):
                 break
 
         logging.info("Starting Background traffic")
+        logging.info(f"Script used: {self.traffic_script}")
         transport = self.ssh_traffic_gen.get_transport()
         channel = transport.open_session()
         # get_pty allows as to request a pseudo-terminal and bound all the
@@ -672,19 +657,17 @@ class CongestionControlEnv(Env):
         self._start_traffic_generator()
         self._traffic_timer = time.time()
 
-
     def _cleanup(self):
         # You gotta clean your stuff sometimes
         self.__del__()
-        self._state_queue = Queue()
-        self._action_queue = Queue()
 
     def _start_external_processes(self, reset_time=True):
         logging.info("-------------------------------------")
         logging.info(f"STARTED EPISODE {self.num_resets}")
+        self._run_grpc_server(self.grpc_port)
         self._run_mockets_server()
         self._start_background_traffic()
-        self._run_grpc_and_mockets()
+        self._run_mockets_ep_client()
         if reset_time:
             self.episode_start_time = time.time()
         logging.info("All commands executed. Episode started!")
@@ -706,6 +689,10 @@ class CongestionControlEnv(Env):
 
     def reset(self) -> GymObs:
         self.report()
+        self._cleanup()
+
+        self._state_queue = Queue()
+        self._action_queue = Queue()
 
         self.mockets_raw_observations = dict((param, 0.0) for param in Parameters)
         self.processed_observations_history = dict((param, [0.0]) for param in State)
@@ -724,48 +711,39 @@ class CongestionControlEnv(Env):
 
     def step(self, action) -> GymStepReturn:
         info = {}
-        reward = 0
 
         self.current_step += 1
         self.total_steps += 1
 
-        #TODO: Try to move this step to reset() method
+        #TODO: Try to move this step to reset() method somehow
         if self.current_step == 1:
             self._start_external_processes()
+            self.state = self._next_state()
+            logging.info(f"Real Initial State: {pprint.pformat(self.state_statistics)}")
 
-        else:
-            cwnd_value = self._cwnd_update_throttle(action[0])
+        cwnd_value = self._cwnd_update_throttle(action[0])
 
-            # CWND value must be in Bytes
-            self._put_action(cwnd_value)
-            # self._put_action(9000)
-            # self._put_action(25000)
-            # Action delay in ms
-            self.action_delay = (time.time() - self.previous_timestamp) * constants.UNIT_FACTOR
-            reward = self._get_reward()
+        # CWND value must be in Bytes
+        self._put_action(cwnd_value)
+        # self._put_action(9000)
+        # self._put_action(25000)
+        # Action delay in ms
+        self.action_delay = (time.time() - self.previous_timestamp) * constants.UNIT_FACTOR
+        self.state = self._next_state()
 
-            info = {
-                'current_statistics': self.last_state,
-                'action': action[0],
-                'reward': reward,
-                'action_delay': self.action_delay,
-                'start_time': self.episode_start_time
-            }
+        reward = self._get_reward()
 
-        observation = self._next_observation()
+        info = {
+            'current_statistics': self.last_state,
+            'action': action[0],
+            'reward': reward,
+            'action_delay': self.action_delay,
+            'start_time': self.episode_start_time
+        }
 
-        done = False
-        if self._is_finished() or self._has_reached_steps_limits() or self.n_timestep == self.total_steps:
-            logging.info("Cleaning up, waiting for communication to end...")
-            self._cleanup()
-            if self._has_reached_steps_limits() and self.enable_truncated_flag:
-                logging.info("TIMEOUT STEPS EXPIRED")
-                info['TimeLimit.truncated'] = True
-            self.episode_time = time.time() - self.episode_start_time
-            info['episode_time'] = self.episode_time
-            done = True
+        done = True if self._is_finished() else False
 
-        return observation, reward, done, info
+        return self.state, reward, done, info
 
     def render(self, mode: str = "console") -> None:
         pass

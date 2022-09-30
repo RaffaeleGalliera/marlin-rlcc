@@ -16,12 +16,10 @@ class TrafficPattern:
 class TrafficGenerator:
     def __init__(self,
                  period_duration_seconds: int = 10,
-                 time_slots: int = 3,
                  seed: int = 9,
                  ):
 
         self.period_duration_seconds = period_duration_seconds
-        self.time_slots = time_slots
         self.seed = seed
         self.tcp_elephant = TrafficPattern(200, "TCP", 5311)
         self.udp_elephant = TrafficPattern(100, "UDP", 4311)
@@ -32,6 +30,8 @@ class TrafficGenerator:
         self.extra_mice = TrafficPattern(50, "UDP", 4600)
 
         self.traffic_patterns = [self.udp_elephant, self.tcp_elephant, self.udp_elephant, self.extra_mice]
+
+        self.evaluation_patterns = self.traffic_patterns
         self.current_patterns = self.traffic_patterns
 
         random.seed(9)
@@ -39,14 +39,14 @@ class TrafficGenerator:
     def generate_training_script(self):
         logging.info("Choosing Random Pattern for next episode")
 
-        self.current_patterns = random.sample(self.traffic_patterns, 4)
+        while self.current_patterns != self.evaluation_patterns:
+            self.current_patterns = random.sample(self.traffic_patterns, 4)
 
         return self.generate_script(self.current_patterns)
 
-
     def generate_evaluation_script(self):
         logging.info("Choosing Eval Pattern for next episode")
-        self.current_patterns = self.traffic_patterns
+        self.current_patterns = self.evaluation_patterns
 
         return self.generate_script(self.current_patterns)
 
