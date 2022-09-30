@@ -3,6 +3,8 @@ from scp import SCPClient
 import logging
 import sys
 import time
+from envs.utils import traffic_generator
+
 logging.basicConfig(level=logging.INFO)
 
 
@@ -36,6 +38,8 @@ def clean(ssh, ssh_traffic_gen, ssh_receiver):
 
 
 for x in range(0, 10):
+    traffic_gen = traffic_generator.TrafficGenerator()
+
     ssh_traffic_gen = SSHClient()
     ssh_traffic_gen.set_missing_host_key_policy(AutoAddPolicy())
 
@@ -54,10 +58,12 @@ for x in range(0, 10):
     time.sleep(1)
 
     logging.info("Launching Traffic gen script")
+    print(traffic_gen.generate_evaluation_script())
     ssh_traffic_gen.exec_command(
-        "/Users/raffaele/Documents/IHMC/mgen/makefiles/mgen inpuT "
-        "/Users/raffaele/Documents/IHMC/evaluation_generator_100MB.mgen",
-        get_pty=True)
+        "/Users/raffaele/Documents/IHMC/mgen/makefiles/mgen "
+        f"{traffic_gen.generate_evaluation_script()}",
+        get_pty=True
+    )
     logging.info(f"Test no. {x + 1}")
     start = time.time()
     scp.put("third-party/rl-baselines3-zoo/test_file.iso")
