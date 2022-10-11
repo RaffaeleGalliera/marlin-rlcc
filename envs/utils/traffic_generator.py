@@ -1,5 +1,8 @@
 import random
 import logging
+import itertools
+
+MICE_FLOWS_KB_S = 20
 
 
 class TrafficPattern:
@@ -21,6 +24,8 @@ class TrafficGenerator:
 
         self.period_duration_seconds = period_duration_seconds
         self.seed = seed
+        self.n_episode = 0
+
         self.tcp_elephant = TrafficPattern(200, "TCP", 5311)
         self.udp_elephant = TrafficPattern(100, "UDP", 4311)
 
@@ -29,24 +34,28 @@ class TrafficGenerator:
 
         self.extra_mice = TrafficPattern(50, "UDP", 4600)
 
-        self.traffic_patterns = [self.udp_elephant, self.tcp_elephant, self.udp_elephant, self.extra_mice]
+        self.traffic_patterns = (self.udp_elephant, self.tcp_elephant, self.udp_elephant, self.extra_mice)
+        self.training_patterns = list(itertools.permutations(self.traffic_patterns))
+        self.evaluation_pattern = self.traffic_patterns
 
-        self.evaluation_patterns = self.traffic_patterns
+        self.training_patterns.remove(self.evaluation_pattern)
+        self.training_patterns.remove(self.evaluation_pattern)
+        assert len(self.training_patterns) == 22
+
         self.current_patterns = self.traffic_patterns
 
         random.seed(9)
 
     def generate_training_script(self):
-        logging.info("Choosing Random Pattern for next episode")
-
-        while self.current_patterns != self.evaluation_patterns:
-            self.current_patterns = random.sample(self.traffic_patterns, 4)
+        logging.info("Choosing Training Pattern for next episode")
+        self.current_patterns = self.training_patterns[self.n_episode % len(self.training_patterns)]
+        self.n_episode += 1
 
         return self.generate_script(self.current_patterns)
 
     def generate_evaluation_script(self):
         logging.info("Choosing Eval Pattern for next episode")
-        self.current_patterns = self.evaluation_patterns
+        self.current_patterns = self.evaluation_pattern
 
         return self.generate_script(self.current_patterns)
 

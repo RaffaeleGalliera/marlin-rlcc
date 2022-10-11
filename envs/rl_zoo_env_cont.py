@@ -274,17 +274,17 @@ def reward_v7(real_goodput, rtt_diff, retransmissions, rtt_min_ema, current_traf
 
 
 def reward_v8(real_goodput, rtt_diff, retransmissions, rtt_min_ema, current_traffic_patterns, traffic_timer, packets_transmitted):
-    elapsed_time_in_period = int(time.time() - traffic_timer) % 8
-    target = constants.LINK_BANDWIDTH_KB - 20
+    # elapsed_time_in_period = float(time.time() - traffic_timer) % 8
+    target = constants.LINK_BANDWIDTH_KB - traffic_generator.MICE_FLOWS_KB_S
 
-    if 0 < elapsed_time_in_period < 2:
-        target = target - current_traffic_patterns[0].packets
-    elif 2 < elapsed_time_in_period < 4:
-        target = target - current_traffic_patterns[1].packets
-    elif 4 < elapsed_time_in_period < 6:
-        target = target - current_traffic_patterns[2].packets
-    elif 6 < elapsed_time_in_period < 8:
-        target = target - current_traffic_patterns[3].packets
+    # if 0 <= elapsed_time_in_period <= 2:
+    #     target = target - current_traffic_patterns[0].packets
+    # elif 2 < elapsed_time_in_period <= 4:
+    #     target = target - current_traffic_patterns[1].packets
+    # elif 4 < elapsed_time_in_period <= 6:
+    #     target = target - current_traffic_patterns[2].packets
+    # elif 6 < elapsed_time_in_period < 8:
+    #     target = target - current_traffic_patterns[3].packets
 
     bonus = (real_goodput/target)
 
@@ -306,6 +306,29 @@ def reward_v8(real_goodput, rtt_diff, retransmissions, rtt_min_ema, current_traf
     return reward
 
 
+def ideal_cwnd(current_traffic_patterns, traffic_timer, rtt, retransmissions):
+    elapsed_time_in_period = float(time.time() - traffic_timer) % 8
+    target = constants.LINK_BANDWIDTH_KB - traffic_generator.MICE_FLOWS_KB_S
+
+    if 0 <= elapsed_time_in_period <= 2:
+        target = target - current_traffic_patterns[0].packets
+    elif 2 < elapsed_time_in_period <= 4:
+        target = target - current_traffic_patterns[1].packets
+    elif 4 < elapsed_time_in_period <= 6:
+        target = target - current_traffic_patterns[2].packets
+    elif 6 < elapsed_time_in_period < 8:
+        target = target - current_traffic_patterns[3].packets
+
+    cwnd = math.ceil((target / (1000/(80))) * constants.UNIT_FACTOR)
+    logging.info(f"TARGET GOOD: {target} RTT:{rtt}, CWND:{cwnd}, RETR: {retransmissions}"
+                 f"ELAPSED: {elapsed_time_in_period}")
+    return cwnd
+
+
+def eval_or_train(is_testing):
+    return "Eval" if is_testing else "Training"
+
+
 class CongestionControlEnv(Env):
     def __init__(self,
                  n_timesteps: int = 500000,
@@ -315,7 +338,8 @@ class CongestionControlEnv(Env):
                  grpc_port: int = 50051,
                  observation_length: int = len(State) * len(Statistic),
                  is_testing: bool = False,
-                 max_duration: int = 500):
+                 max_duration: int = 500,
+                 max_time_steps_per_episode: int = 500):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -328,11 +352,6 @@ class CongestionControlEnv(Env):
                                      high=float("inf"),
                                      shape=(observation_length, ))
 
-        # Observation queue where the server will publish
-        self._state_queue = Queue()
-        # Action queue where the agent will publish the action
-        self._action_queue = Queue()
-
         self.current_step = 0
         self.total_steps = 0
         self.num_resets = 0
@@ -341,6 +360,7 @@ class CongestionControlEnv(Env):
         self.episode_time = 0
         self.action_delay = 0
         self.n_timestep = n_timesteps
+        self.max_time_steps_per_episode = max_time_steps_per_episode
 
         self.previous_timestamp = 0
         self.mockets_raw_observations = dict((param, 0.0) for param in Parameters)
@@ -371,6 +391,10 @@ class CongestionControlEnv(Env):
         # Run server in a different process
         self._server_process = None
         self._mocket_process = None
+        # Observation queue where the server will publish
+        self._state_queue = None
+        # Action queue where the agent will publish the action
+        self._action_queue = None
 
         self._is_testing = is_testing
         self._max_duration = max_duration
@@ -387,6 +411,7 @@ class CongestionControlEnv(Env):
     def __del__(self):
         """Book-keeping to release resources"""
         if self._server_process is not None and self._mocket_process is not None:
+            logging.info(f"Closing process for {eval_or_train(self._is_testing)}")
             logging.info("Closing Mockets Client connection")
             self._mocket_process.terminate()
 
@@ -395,7 +420,6 @@ class CongestionControlEnv(Env):
 
             logging.info("Closing GRPC Server...")
             self._server_process.terminate()
-
             self._server_process.join()
             self._server_process.close()
 
@@ -407,6 +431,9 @@ class CongestionControlEnv(Env):
 
             logging.info("Closing BG Traffic receiver")
             self.ssh_traffic_rec.close()
+
+            self._mocket_process = None
+            self._server_process = None
 
             # Sleep, increase the chance ssh connections detected close()
             time.sleep(2)
@@ -663,7 +690,9 @@ class CongestionControlEnv(Env):
 
     def _start_external_processes(self, reset_time=True):
         logging.info("-------------------------------------")
-        logging.info(f"STARTED EPISODE {self.num_resets}")
+        logging.info(f"STARTED EPISODE {self.num_resets} {eval_or_train(self._is_testing)}")
+        self._state_queue = Queue()
+        self._action_queue = Queue()
         self._run_grpc_server(self.grpc_port)
         self._run_mockets_server()
         self._start_background_traffic()
@@ -674,7 +703,7 @@ class CongestionControlEnv(Env):
 
     def report(self):
         time_taken = time.time() - self.episode_start_time
-        logging.info(f"EPISODE {self.num_resets} COMPLETED")
+        logging.info(f"EPISODE {self.num_resets} {eval_or_train(self._is_testing)} COMPLETED")
         logging.info(f"Stats: {pprint.pformat(self.state_statistics)}")
         logging.info(f"Steps taken during episode: {self.current_step}")
         logging.info(f"Return accumulated: {self.episode_return}")
@@ -690,9 +719,6 @@ class CongestionControlEnv(Env):
     def reset(self) -> GymObs:
         self.report()
         self._cleanup()
-
-        self._state_queue = Queue()
-        self._action_queue = Queue()
 
         self.mockets_raw_observations = dict((param, 0.0) for param in Parameters)
         self.processed_observations_history = dict((param, [0.0]) for param in State)
@@ -710,8 +736,6 @@ class CongestionControlEnv(Env):
         return initial_state
 
     def step(self, action) -> GymStepReturn:
-        info = {}
-
         self.current_step += 1
         self.total_steps += 1
 
@@ -719,13 +743,19 @@ class CongestionControlEnv(Env):
         if self.current_step == 1:
             self._start_external_processes()
             self.state = self._next_state()
-            logging.info(f"Real Initial State: {pprint.pformat(self.state_statistics)}")
 
         cwnd_value = self._cwnd_update_throttle(action[0])
 
         # CWND value must be in Bytes
-        self._put_action(cwnd_value)
+        # self._put_action(cwnd_value)
         # self._put_action(9000)
+        self._put_action((ideal_cwnd(
+            current_traffic_patterns=self.traffic_generator.current_patterns,
+            traffic_timer=self._traffic_timer,
+            rtt=self.state_statistics[State.LAST_RTT][Statistic.LAST],
+            retransmissions=self.state_statistics[State.RETRANSMISSIONS][
+                Statistic.LAST]
+        )))
         # self._put_action(25000)
         # Action delay in ms
         self.action_delay = (time.time() - self.previous_timestamp) * constants.UNIT_FACTOR
@@ -741,9 +771,12 @@ class CongestionControlEnv(Env):
             'start_time': self.episode_start_time
         }
 
-        done = True if self._is_finished() else False
+        terminated = True if self._is_finished() else False
+        if self.current_step >= self.max_time_steps_per_episode:
+            info["TimeLimit.truncated"] = not terminated
+            terminated = True
 
-        return self.state, reward, done, info
+        return self.state, reward, terminated, info
 
     def render(self, mode: str = "console") -> None:
         pass

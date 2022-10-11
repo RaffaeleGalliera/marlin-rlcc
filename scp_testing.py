@@ -37,9 +37,10 @@ def clean(ssh, ssh_traffic_gen, ssh_receiver):
     ssh.close()
 
 
-for x in range(0, 10):
-    traffic_gen = traffic_generator.TrafficGenerator()
+times = []
+traffic_gen = traffic_generator.TrafficGenerator()
 
+for x in range(0, 22):
     ssh_traffic_gen = SSHClient()
     ssh_traffic_gen.set_missing_host_key_policy(AutoAddPolicy())
 
@@ -58,7 +59,7 @@ for x in range(0, 10):
     time.sleep(1)
 
     logging.info("Launching Traffic gen script")
-    print(traffic_gen.generate_evaluation_script())
+    print(traffic_gen.generate_training_script())
     ssh_traffic_gen.exec_command(
         "/Users/raffaele/Documents/IHMC/mgen/makefiles/mgen "
         f"{traffic_gen.generate_evaluation_script()}",
@@ -67,6 +68,11 @@ for x in range(0, 10):
     logging.info(f"Test no. {x + 1}")
     start = time.time()
     scp.put("third-party/rl-baselines3-zoo/test_file.iso")
-    logging.info(f"Finished in {(time.time() - start)}s")
+    finish = (time.time() - start)
+    logging.info(f"Finished in {finish}s")
     scp.close()
+    times.append(finish)
     clean(ssh_traffic_gen, ssh, ssh_receiver)
+    time.sleep(2)
+
+logging.info(f"Average Time taken: {sum(times)/len(times)}")

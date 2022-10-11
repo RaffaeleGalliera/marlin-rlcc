@@ -2,6 +2,7 @@
 
 from __future__ import print_function
 import asyncio
+import concurrent.futures
 import logging
 from typing import AsyncIterable
 
@@ -57,6 +58,10 @@ class CongestionControlService(congestion_control_pb2_grpc.
 
             # Put in queue, note that queue is infinite aka doesn't block
             self._state_queue.put(parameter)
+            # 2. Run in a custom thread pool:
+            # with concurrent.futures.ThreadPoolExecutor() as pool:
+            #     action = await loop.run_in_executor(
+            #         pool, self._action_queue.get)
 
             action = await loop.run_in_executor(None,
                                                 self._action_queue.get)
