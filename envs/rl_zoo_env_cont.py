@@ -59,7 +59,7 @@ def mockets_dist_args(mockets_server_ip: str, grpc_port: int, is_testing: bool,
     if is_testing:
         path = f"{constants.DIST_PATH}/testing/examples/bin/examples"
     else:
-        path = f"{constants.DIST_PATH}/testing/examples/bin/examples"
+        path = f"{constants.DIST_PATH}/training/examples/bin/examples"
 
     return [path,
             '-ip',
@@ -274,17 +274,17 @@ def reward_v7(real_goodput, rtt_diff, retransmissions, rtt_min_ema, current_traf
 
 
 def reward_v8(real_goodput, rtt_diff, retransmissions, rtt_min_ema, current_traffic_patterns, traffic_timer, packets_transmitted):
-    # elapsed_time_in_period = float(time.time() - traffic_timer) % 8
+    elapsed_time_in_period = float(time.time() - traffic_timer) % 8
     target = constants.LINK_BANDWIDTH_KB - traffic_generator.MICE_FLOWS_KB_S
 
-    # if 0 <= elapsed_time_in_period <= 2:
-    #     target = target - current_traffic_patterns[0].packets
-    # elif 2 < elapsed_time_in_period <= 4:
-    #     target = target - current_traffic_patterns[1].packets
-    # elif 4 < elapsed_time_in_period <= 6:
-    #     target = target - current_traffic_patterns[2].packets
-    # elif 6 < elapsed_time_in_period < 8:
-    #     target = target - current_traffic_patterns[3].packets
+    if 0 <= elapsed_time_in_period <= 2:
+        target = target - current_traffic_patterns[0].packets
+    elif 2 < elapsed_time_in_period <= 4:
+        target = target - current_traffic_patterns[1].packets
+    elif 4 < elapsed_time_in_period <= 6:
+        target = target - current_traffic_patterns[2].packets
+    elif 6 < elapsed_time_in_period < 8:
+        target = target - current_traffic_patterns[3].packets
 
     bonus = (real_goodput/target)
 
@@ -338,16 +338,14 @@ class CongestionControlEnv(Env):
                  grpc_port: int = 50051,
                  observation_length: int = len(State) * len(Statistic),
                  is_testing: bool = False,
-                 max_duration: int = 500,
-                 max_time_steps_per_episode: int = 500):
+                 max_duration: int = 80,
+                 max_time_steps_per_episode: int = 200):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
         :param observation_lenght: the lenght of the observations
         """
         self.action_space = Box(low=-1, high=+1, shape=(1,), dtype=np.float32)
-
-
         self.observation_space = Box(low=-float("inf"),
                                      high=float("inf"),
                                      shape=(observation_length, ))
@@ -360,7 +358,6 @@ class CongestionControlEnv(Env):
         self.episode_time = 0
         self.action_delay = 0
         self.n_timestep = n_timesteps
-        self.max_time_steps_per_episode = max_time_steps_per_episode
 
         self.previous_timestamp = 0
         self.mockets_raw_observations = dict((param, 0.0) for param in Parameters)
@@ -398,6 +395,8 @@ class CongestionControlEnv(Env):
 
         self._is_testing = is_testing
         self._max_duration = max_duration
+        self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
+
 
         self.traffic_generator = traffic_generator.TrafficGenerator()
         self._traffic_timer = None
@@ -405,6 +404,9 @@ class CongestionControlEnv(Env):
         self.episode_evaluation_script = self.traffic_generator.generate_evaluation_script()
 
         self.traffic_script = None
+        self.target_episode = 0
+        self.effective_episode = 0
+        self.last_step_timestamp = None
 
         # self.reset()
 
@@ -504,7 +506,7 @@ class CongestionControlEnv(Env):
     def _fetch_param_and_update_stats(self) -> int:
         while True:
             try:
-                obs = self._state_queue.get(timeout=30)
+                obs = self._state_queue.get(timeout=3)
             except queue.Empty as error:
                 logging.info(f"Parameter Fetch: Timeout occurred")
                 logging.info("Restarting Service!!")
@@ -546,26 +548,16 @@ class CongestionControlEnv(Env):
     def _put_action(self, action):
         self._action_queue.put(action)
 
-    # b = (1 + math.log(goodput/current_ema_throughput))
-    # (bandwidth_used/bandwidth_avail)
-    # (throughput/(last_rtt - rtt_min))
-    # th = math.log((eps + instant_goodput))
-    # Add retrasmissions/total_packets_sent
     def _get_reward(self) -> float:
-        reward = reward_v8(
-            real_goodput=self.state_statistics[State.GOODPUT][Statistic.LAST],
-            retransmissions=self.state_statistics[State.RETRANSMISSIONS][Statistic.LAST],
-            rtt_diff=self.state_statistics[State.LAST_RTT][Statistic.DIFF],
-            rtt_min_ema=self.state_statistics[State.MIN_RTT][Statistic.EMA],
+        reward = self.reward_v9(
             current_traffic_patterns=self.traffic_generator.current_patterns,
-            traffic_timer=self._traffic_timer,
-            packets_transmitted=self.state_statistics[State.PACKETS_TRANSMITTED][Statistic.LAST]
+            traffic_timer=self._traffic_timer
         )
         self.episode_return += reward
 
         return reward
 
-    # New CWND by throttle action return the amout of BYTES the CWND can be set
+    # New CWND by throttle action return the amount of BYTES the CWND can be set
     def _cwnd_update_throttle(self, percentage) -> int:
         # New CWND in Bytes
         current_cwnd = self.state_statistics[State.CURR_WINDOW_SIZE][Statistic.LAST]
@@ -590,8 +582,8 @@ class CongestionControlEnv(Env):
         while True:
             try:
                 self.ssh_mockets_server.connect(self._mockets_server_ip,
-                                                username="marlin",
-                                                password="nomads")
+                                                username="pi",
+                                                password="raspberry")
             except paramiko.ssh_exception.NoValidConnectionsError as e:
                 logging.info("Connection failed, new attempt...")
             except socket.timeout as e:
@@ -613,7 +605,7 @@ class CongestionControlEnv(Env):
         # from  that folder
         channel.get_pty()
         channel.exec_command(
-                "cd /home/marlin/Documents/jmockets/examples/bin/ && "
+                "cd /home/pi/examples/bin/ && "
                 "./examples -ip 0.0.0.0",
             )
 
@@ -682,7 +674,9 @@ class CongestionControlEnv(Env):
     def _start_background_traffic(self):
         self._start_traffic_receiver()
         self._start_traffic_generator()
-        self._traffic_timer = time.time()
+        instant = time.time()
+        self._traffic_timer = instant
+        self.last_step_timestamp = instant
 
     def _cleanup(self):
         # You gotta clean your stuff sometimes
@@ -693,10 +687,12 @@ class CongestionControlEnv(Env):
         logging.info(f"STARTED EPISODE {self.num_resets} {eval_or_train(self._is_testing)}")
         self._state_queue = Queue()
         self._action_queue = Queue()
+
         self._run_grpc_server(self.grpc_port)
         self._run_mockets_server()
         self._start_background_traffic()
         self._run_mockets_ep_client()
+
         if reset_time:
             self.episode_start_time = time.time()
         logging.info("All commands executed. Episode started!")
@@ -728,12 +724,49 @@ class CongestionControlEnv(Env):
         self.current_step = 0
         self.num_resets += 1
         self.episode_return = 0
+        self.target_episode = 0
+        self.effective_episode = 0
+
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
 
         self.traffic_script = self.traffic_generator.generate_evaluation_script() if self._is_testing else self.traffic_generator.generate_training_script()
 
         return initial_state
+
+    def reward_v9(self, current_traffic_patterns, traffic_timer):
+        elapsed_time_in_period = float(time.time() - traffic_timer) % 8
+        target_goodput = constants.LINK_BANDWIDTH_KB - traffic_generator.MICE_FLOWS_KB_S
+        time_since_last = time.time() - self.last_step_timestamp
+
+        if 0 <= elapsed_time_in_period <= 2:
+            target_goodput = target_goodput - current_traffic_patterns[0].packets
+        elif 2 < elapsed_time_in_period <= 4:
+            target_goodput = target_goodput - current_traffic_patterns[1].packets
+        elif 4 < elapsed_time_in_period <= 6:
+            target_goodput = target_goodput - current_traffic_patterns[2].packets
+        elif 6 < elapsed_time_in_period < 8:
+            target_goodput = target_goodput - current_traffic_patterns[3].packets
+
+        self.effective_episode += self.state_statistics[State.SENT_GOOD_BYTES_TIMEFRAME][Statistic.LAST]
+        # Count loss for target
+        self.target_episode += target_goodput * time_since_last * 0.97
+
+
+        if self.effective_episode > self.target_episode:
+            reward = - 1 / 2
+        else:
+            reward = - 1 / (1 + (self.effective_episode / self.target_episode))
+
+        logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
+
+        return reward
+
+    def truncated(self):
+        if self.current_step >= self.max_time_steps_per_episode:
+            return True
+        else:
+            return False
 
     def step(self, action) -> GymStepReturn:
         self.current_step += 1
@@ -747,16 +780,8 @@ class CongestionControlEnv(Env):
         cwnd_value = self._cwnd_update_throttle(action[0])
 
         # CWND value must be in Bytes
-        # self._put_action(cwnd_value)
-        # self._put_action(9000)
-        self._put_action((ideal_cwnd(
-            current_traffic_patterns=self.traffic_generator.current_patterns,
-            traffic_timer=self._traffic_timer,
-            rtt=self.state_statistics[State.LAST_RTT][Statistic.LAST],
-            retransmissions=self.state_statistics[State.RETRANSMISSIONS][
-                Statistic.LAST]
-        )))
-        # self._put_action(25000)
+        self._put_action(cwnd_value)
+
         # Action delay in ms
         self.action_delay = (time.time() - self.previous_timestamp) * constants.UNIT_FACTOR
         self.state = self._next_state()
@@ -772,9 +797,12 @@ class CongestionControlEnv(Env):
         }
 
         terminated = True if self._is_finished() else False
-        if self.current_step >= self.max_time_steps_per_episode:
+
+        if self.truncated():
             info["TimeLimit.truncated"] = not terminated
             terminated = True
+
+        self.last_step_timestamp = time.time()
 
         return self.state, reward, terminated, info
 

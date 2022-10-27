@@ -38,10 +38,6 @@ class TrafficGenerator:
         self.training_patterns = list(itertools.permutations(self.traffic_patterns))
         self.evaluation_pattern = self.traffic_patterns
 
-        self.training_patterns.remove(self.evaluation_pattern)
-        self.training_patterns.remove(self.evaluation_pattern)
-        assert len(self.training_patterns) == 22
-
         self.current_patterns = self.traffic_patterns
 
         random.seed(9)
