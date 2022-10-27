@@ -1,16 +1,15 @@
 """Implementation of the Congestion Control Server"""
 
 from __future__ import print_function
-import os
-import queue
 import asyncio
+import concurrent.futures
 import logging
-from typing import AsyncIterable, Optional, Union
+from typing import AsyncIterable
 
 import grpc
 from protos import congestion_control_pb2, congestion_control_pb2_grpc
 from multiprocessing import Queue
-from constants import Parameters
+from envs.utils.constants import Parameters
 
 
 class CongestionControlService(congestion_control_pb2_grpc.
@@ -55,8 +54,14 @@ class CongestionControlService(congestion_control_pb2_grpc.
             parameter[Parameters.TIMESTAMP] = status.timestamp
             parameter[Parameters.FINISHED] = status.finished
 
+            parameter[Parameters.ACKED_BYTES_TIMEFRAME] = status.acked_bytes_timeframe
+
             # Put in queue, note that queue is infinite aka doesn't block
             self._state_queue.put(parameter)
+            # 2. Run in a custom thread pool:
+            # with concurrent.futures.ThreadPoolExecutor() as pool:
+            #     action = await loop.run_in_executor(
+            #         pool, self._action_queue.get)
 
             action = await loop.run_in_executor(None,
                                                 self._action_queue.get)
