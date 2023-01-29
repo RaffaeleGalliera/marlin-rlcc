@@ -393,6 +393,7 @@ class CongestionControlEnv(Env):
         # Action queue where the agent will publish the action
         self._action_queue = None
 
+        self.parameter_fetch_error = False
         self._is_testing = is_testing
         self._max_duration = max_duration
         self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
@@ -510,6 +511,7 @@ class CongestionControlEnv(Env):
             except queue.Empty as error:
                 logging.info(f"Parameter Fetch: Timeout occurred")
                 logging.info("Restarting Service!!")
+                self.parameter_fetch_error = True
                 self._cleanup()
                 self._start_external_processes(reset_time=False)
             else:
@@ -583,7 +585,7 @@ class CongestionControlEnv(Env):
             try:
                 self.ssh_mockets_server.connect(self._mockets_server_ip,
                                                 username="pi",
-                                                password="raspberry")
+                                                password="raspberry", timeout=60)
             except paramiko.ssh_exception.NoValidConnectionsError as e:
                 logging.info("Connection failed, new attempt...")
             except socket.timeout as e:
@@ -615,7 +617,7 @@ class CongestionControlEnv(Env):
             try:
                 self.ssh_traffic_gen.connect(self._traffic_generator_ip,
                                              username="raffaele",
-                                             password="armageddon12345")
+                                             password="armageddon12345", timeout=60)
             except paramiko.ssh_exception.NoValidConnectionsError as e:
                 logging.info("Connection failed, new attempt...")
             except socket.timeout as e:
@@ -646,7 +648,7 @@ class CongestionControlEnv(Env):
             try:
                 self.ssh_traffic_rec.connect(self._traffic_receiver_ip,
                                              username="nomads",
-                                             password="nomads")
+                                             password="nomads", timeout=60)
             except paramiko.ssh_exception.NoValidConnectionsError as e:
                 logging.info("Connection failed, new attempt...")
             except socket.timeout as e:
@@ -721,6 +723,8 @@ class CongestionControlEnv(Env):
         self.state_statistics = dict((stats, dict((stat, 0.0) for stat in Statistic)) for stats in State)
         self.last_state = dict((param, 0.0) for param in State)
 
+        self.parameter_fetch_error = False
+
         self.current_step = 0
         self.num_resets += 1
         self.episode_return = 0
@@ -736,6 +740,7 @@ class CongestionControlEnv(Env):
 
     def reward_v9(self, current_traffic_patterns, traffic_timer):
         elapsed_time_in_period = float(time.time() - traffic_timer) % 8
+
         target_goodput = constants.LINK_BANDWIDTH_KB - traffic_generator.MICE_FLOWS_KB_S
         time_since_last = time.time() - self.last_step_timestamp
 
@@ -793,7 +798,8 @@ class CongestionControlEnv(Env):
             'action': action[0],
             'reward': reward,
             'action_delay': self.action_delay,
-            'start_time': self.episode_start_time
+            'start_time': self.episode_start_time,
+            'parameter_fetch_error': self.parameter_fetch_error
         }
 
         terminated = True if self._is_finished() else False

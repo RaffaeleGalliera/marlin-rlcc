@@ -44,8 +44,14 @@ class TrafficGenerator:
 
     def generate_training_script(self):
         logging.info("Choosing Training Pattern for next episode")
-        self.current_patterns = self.training_patterns[self.n_episode % len(self.training_patterns)]
-        self.n_episode += 1
+
+        tcp_elephant = TrafficPattern(random.randint(10, 200), "TCP", 5311)
+        udp_elephant = TrafficPattern(random.randint(10, 200), "UDP", 4311)
+        extra_mice = TrafficPattern(random.randint(10, 200), "UDP", 4600)
+
+        pattern = [udp_elephant, tcp_elephant, udp_elephant, extra_mice]
+        random.shuffle(pattern)
+        self.current_patterns = tuple(pattern)
 
         return self.generate_script(self.current_patterns)
 
@@ -54,7 +60,6 @@ class TrafficGenerator:
         self.current_patterns = self.evaluation_pattern
 
         return self.generate_script(self.current_patterns)
-
 
     def generate_script(self, chosen_list):
         logging.info("Traffic Order")

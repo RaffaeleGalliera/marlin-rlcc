@@ -9,7 +9,7 @@ from stable_baselines3.common.vec_env import VecEnv
 from envs.utils.constants import State
 from stable_baselines3.common.callbacks import EvalCallback
 import time
-import numpy as np
+
 
 class TrainingCallback(BaseCallback):
     """
@@ -79,7 +79,7 @@ class TrainingCallback(BaseCallback):
                 avg_episodic_retransmissions = self._retransmissions_sum/info["episode"]["l"]
                 avg_window_size = self._cwnd_sum/info["episode"]["l"]
                 avg_delay = self._delay_sum/info["episode"]["l"]
-                truncated = 1 if info.get("TimeLimit.truncated", False) == True else 0
+                parameter_fetch = 1 if info.get("parameter_fetch_error", False) == True else 0
 
                 logger_dict = {
                     "training/rollouts/episodic_return": info["episode"]["r"],
@@ -93,7 +93,7 @@ class TrainingCallback(BaseCallback):
                     "training/rollouts/episodic_window_size_KB":
                         avg_window_size,
                     "training/rollouts/avg_delay_ms": avg_delay,
-                    "training/rollouts/truncated": truncated,
+                    "training/rollouts/parameter_fetch": parameter_fetch,
                     "training/rollouts/time_taken": time.time() - info['start_time']
                 }
 
