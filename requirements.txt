@@ -1,7 +1,9 @@
-grpcio
-grpcio-tools
+grpcio==1.51.1
+grpcio-tools==1.44.0
+protobuf==3.20.3
 numpy
 stable-baselines3
+sb3_contrib
 pytest
 wandb
 seaborn
