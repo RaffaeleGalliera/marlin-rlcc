@@ -398,7 +398,6 @@ class CongestionControlEnv(Env):
         self._max_duration = max_duration
         self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
 
-
         self.traffic_generator = traffic_generator.TrafficGenerator()
         self._traffic_timer = None
         self.episode_training_script = None
