@@ -44,25 +44,6 @@ def _state_parameters_intersection():
     return parameters_values & state_values
 
 
-def ideal_cwnd(current_traffic_patterns, traffic_timer, rtt, retransmissions):
-    elapsed_time_in_period = float(time.time() - traffic_timer) % 8
-    target = constants.LINK_BANDWIDTH_KB - traffic_generator.MICE_FLOWS_KB_S
-
-    if 0 <= elapsed_time_in_period <= 2:
-        target = target - current_traffic_patterns[0].packets
-    elif 2 < elapsed_time_in_period <= 4:
-        target = target - current_traffic_patterns[1].packets
-    elif 4 < elapsed_time_in_period <= 6:
-        target = target - current_traffic_patterns[2].packets
-    elif 6 < elapsed_time_in_period < 8:
-        target = target - current_traffic_patterns[3].packets
-
-    cwnd = math.ceil((target / (1000/(80))) * constants.UNIT_FACTOR)
-    logging.info(f"TARGET GOOD: {target} RTT:{rtt}, CWND:{cwnd}, RETR: {retransmissions}"
-                 f"ELAPSED: {elapsed_time_in_period}")
-    return cwnd
-
-
 def eval_or_train(is_testing):
     return "Eval" if is_testing else "Training"
 
