@@ -76,25 +76,25 @@ class DumbbellTopology(Topo):
                            cls=Docker,
                            ip='10.0.1.1/24',
                            defaultRoute='via 10.0.1.254',
-                           dimage='raffaele/mockets:0.1')
+                           dimage='mockets:0.1')
 
         lh2 = self.addHost('lh2',
                            cls=Docker,
                            ip='10.0.1.2/24',
                            defaultRoute='via 10.0.1.254',
-                           dimage='raffaele/mgen:0.1')
+                           dimage='mgen:0.1')
 
         rh1 = self.addHost('rh1',
                            cls=Docker,
                            ip='10.0.2.1/24',
                            defaultRoute='via 10.0.2.254',
-                           dimage='raffaele/mockets:0.1')
+                           dimage='mockets:0.1')
 
         rh2 = self.addHost('rh2',
                            cls=Docker,
                            ip='10.0.2.2/24',
                            defaultRoute='via 10.0.2.254',
-                           dimage='raffaele/mgen:0.1')
+                           dimage='mgen:0.1')
 
         # Add links
         info('*** Connect the switches to the router\n')
