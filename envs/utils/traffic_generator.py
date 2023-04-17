@@ -4,7 +4,6 @@ import itertools
 
 MICE_FLOWS_KB_S = 20
 
-
 class TrafficPattern:
     def __init__(self,
                  packets: float,
@@ -42,7 +41,7 @@ class TrafficGenerator:
 
         random.seed(9)
 
-    def generate_training_script(self):
+    def generate_training_script(self, receiver_ip):
         logging.info("Choosing Training Pattern for next episode")
 
         tcp_elephant = TrafficPattern(random.randint(10, 200), "TCP", 5311)
@@ -53,59 +52,54 @@ class TrafficGenerator:
         random.shuffle(pattern)
         self.current_patterns = tuple(pattern)
 
-        return self.generate_script(self.current_patterns)
+        return self.generate_script(self.current_patterns, receiver_ip)
 
-    def generate_evaluation_script(self):
+    def generate_evaluation_script(self, receiver_ip):
         logging.info("Choosing Eval Pattern for next episode")
         self.current_patterns = self.evaluation_pattern
 
-        return self.generate_script(self.current_patterns)
+        return self.generate_script(self.current_patterns, receiver_ip)
 
-    def generate_script(self, chosen_list):
+    def generate_script(self, chosen_list, receiver_ip):
         logging.info("Traffic Order")
         logging.info([f"{pattern.protocol} - {pattern.packets}" for pattern in chosen_list])
 
         slot_0 = f"0.0 ON 1 {chosen_list[0].protocol} SRC {chosen_list[0].port} " \
                  f"DST " \
-                 f"192.168.1.40/{chosen_list[0].port} BURST [" \
+                 f"{receiver_ip}/{chosen_list[0].port} BURST [" \
                  f"REGULAR " \
                  f"8.0 PERIODIC [{chosen_list[0].packets} 1024] FIXED 2.0] " \
                  f"TTL 64"
 
         slot_1 = f"2.0 ON 2 {chosen_list[1].protocol} SRC {chosen_list[1].port} " \
                  f"DST " \
-                 f"192.168.1.40/{chosen_list[1].port} BURST [" \
+                 f"{receiver_ip}/{chosen_list[1].port} BURST [" \
                  f"REGULAR " \
                  f"8.0 PERIODIC [{chosen_list[1].packets} 1024] FIXED 2.0] " \
                  f"TTL 64"
 
         slot_2 = f"4.0 ON 3 {chosen_list[2].protocol} SRC {chosen_list[2].port} " \
                  f"DST " \
-                 f"192.168.1.40/{chosen_list[2].port} BURST [" \
+                 f"{receiver_ip}/{chosen_list[2].port} BURST [" \
                  f"REGULAR " \
                  f"8.0 PERIODIC [{chosen_list[2].packets} 1024] FIXED 2.0] " \
                  f"TTL 64"
 
         slot_3 = f"6.0 ON 4 {chosen_list[3].protocol} SRC {chosen_list[3].port} " \
                  f"DST " \
-                 f"192.168.1.40/{chosen_list[3].port} BURST [" \
+                 f"{receiver_ip}/{chosen_list[3].port} BURST [" \
                  f"REGULAR " \
                  f"8.0 PERIODIC [{chosen_list[3].packets} 1024] FIXED 2.0] " \
                  f"TTL 64"
 
-        mice_1 = f"0.0 ON 5 TCP SRC {self.tcp_mice.port} DST 192.168.1.40/" \
+        mice_1 = f"0.0 ON 5 TCP SRC {self.tcp_mice.port} DST {receiver_ip}/" \
                  f"{self.tcp_mice.port} " \
                  f"PERIODIC [{self.tcp_mice.packets} 32768]"
 
-        mice_2 = f"0.0 ON 6 UDP SRC {self.udp_mice.port} DST 192.168.1.40/" \
+        mice_2 = f"0.0 ON 6 UDP SRC {self.udp_mice.port} DST {receiver_ip}/" \
                  f"{self.udp_mice.port} " \
                  f"BURST [REGULAR 2.5 PERIODIC [{self.udp_mice.packets} 1024] " \
                  f"FIXED 0.333]"
 
         return f"event \"{slot_0}\" event \"{slot_1}\" event \"{slot_2}\" " \
                f"event \"{slot_3}\" event \"{mice_1}\" event \"{mice_2}\""
-
-
-
-
-
