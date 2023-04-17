@@ -1,0 +1,21 @@
+# Tuned
+Marlin-v1:
+  env_wrapper:
+    - utils.wrappers.HistoryWrapper:
+        horizon: 10
+  callback:
+    - envs.utils.callbacks.TrainingCallback
+  n_timesteps: !!float 1e6
+  policy: 'MlpPolicy'
+  normalize: "{'norm_obs': True, 'norm_reward': False}"
+  learning_rate: !!float 3e-4
+  buffer_size: 500000
+  batch_size: 512
+  ent_coef: 'auto'
+  gamma: 0.99
+#  tau: 0.02
+  train_freq: [1, "episode"]
+  gradient_steps: -1
+  learning_starts: 10000
+#  use_sde: True
+  policy_kwargs: "dict(net_arch=[400, 300])"
