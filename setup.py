@@ -13,6 +13,8 @@ setup(name='marlin',
           "stable-baselines3",
           "sb3_contrib",
           'optuna',
+          "docker",
+          "netifaces"
           "pytest",
           "wandb",
           "seaborn",

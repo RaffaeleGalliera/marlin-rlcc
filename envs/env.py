@@ -4,22 +4,19 @@ import queue
 import numpy as np
 import logging
 from gym import Env
-from gym.spaces import Box, Discrete
+from gym.spaces import Box
 from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 
-import grpc.congestion_control_server as cc_server
+import grpc_server.congestion_control_server as cc_server
 from envs.utils import constants, traffic_generator
 import math
 from envs.utils.constants import Parameters, State,Statistic
-import subprocess
-import paramiko
 
 import pprint
-import pandas as pd
-from collections import defaultdict
+import docker
+import netifaces as ni
 
-from statistics import fmean, median_low, median, median_high, stdev
-import socket
+from statistics import fmean, stdev
 
 logging.basicConfig(level=logging.INFO)
 
@@ -48,7 +45,7 @@ def mockets_gradlew_args(mockets_server_ip: str, grpc_port: int, is_testing: boo
 
     return ['/code/jmockets/gradlew',
             client_type,
-            f"--args=-ip {mockets_server_ip} --grpc-server localhost:"
+            f"--args=-ip {mockets_server_ip} --grpc_server-server localhost:"
             f"{grpc_port} --duration {duration}",
             '-p',
             '/code/jmockets']
@@ -64,7 +61,7 @@ def mockets_dist_args(mockets_server_ip: str, grpc_port: int, is_testing: bool,
     return [path,
             '-ip',
             f'{mockets_server_ip}',
-            '--grpc-server',
+            '--grpc_server-server',
             f'localhost:{grpc_port}',
             '--duration',
             f'{duration}']
@@ -332,9 +329,9 @@ def eval_or_train(is_testing):
 class CongestionControlEnv(Env):
     def __init__(self,
                  n_timesteps: int = 500000,
-                 mockets_server_ip: str = "192.168.1.17",
-                 traffic_generator_ip: str = "192.168.2.40",
-                 traffic_receiver_ip: str = "192.168.1.40",
+                 mockets_server_ip: str = "10.0.2.1",
+                 traffic_generator_ip: str = "10.0.1.2",
+                 traffic_receiver_ip: str = "10.0.2.2",
                  grpc_port: int = 50051,
                  observation_length: int = len(State) * len(Statistic),
                  is_testing: bool = False,
@@ -366,28 +363,22 @@ class CongestionControlEnv(Env):
         self.state_statistics = dict((stats, dict((stat, 0.0) for stat in Statistic)) for stats in State)
         self.last_state = dict((param, 0.0) for param in State)
 
-        self._mockets_server_ip = mockets_server_ip
+        self._mockets_receiver_ip = mockets_server_ip
         self._traffic_generator_ip = traffic_generator_ip
         self._traffic_receiver_ip = traffic_receiver_ip
 
         self.grpc_port = grpc_port
 
-        self.ssh_traffic_gen = paramiko.SSHClient()
-        self.ssh_traffic_gen.set_missing_host_key_policy(
-            paramiko.AutoAddPolicy())
-
-        self.ssh_traffic_rec = paramiko.SSHClient()
-        self.ssh_traffic_rec.set_missing_host_key_policy(
-            paramiko.AutoAddPolicy())
-
-        self.ssh_mockets_server = paramiko.SSHClient()
-        self.ssh_server_stdout = None
-        self.ssh_mockets_server.set_missing_host_key_policy(
-            paramiko.AutoAddPolicy())
+        # Bind to Docker Client
+        self.docker_client = docker.from_env()
+        # Get containers
+        self.mockets_sender = self.docker_client.containers.get("mn.lh1")
+        self.mockets_receiver = self.docker_client.containers.get("mn.rh1")
+        self.bg_sender = self.docker_client.containers.get("mn.lh2")
+        self.bg_receiver = self.docker_client.containers.get("mn.rh2")
 
         # Run server in a different process
         self._server_process = None
-        self._mocket_process = None
         # Observation queue where the server will publish
         self._state_queue = None
         # Action queue where the agent will publish the action
@@ -401,7 +392,7 @@ class CongestionControlEnv(Env):
         self.traffic_generator = traffic_generator.TrafficGenerator()
         self._traffic_timer = None
         self.episode_training_script = None
-        self.episode_evaluation_script = self.traffic_generator.generate_evaluation_script()
+        self.episode_evaluation_script = self.traffic_generator.generate_evaluation_script(receiver_ip=self._traffic_receiver_ip)
 
         self.traffic_script = None
         self.target_episode = 0
@@ -412,13 +403,21 @@ class CongestionControlEnv(Env):
 
     def __del__(self):
         """Book-keeping to release resources"""
-        if self._server_process is not None and self._mocket_process is not None:
-            logging.info(f"Closing process for {eval_or_train(self._is_testing)}")
-            logging.info("Closing Mockets Client connection")
-            self._mocket_process.terminate()
+        if self._server_process is not None:
+            shutdown_mockets = ['sh', '-c', "ps -ef | grep 'mockets' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
+            shutdown_mgen = ['sh', '-c', "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
-            logging.info("Closing Mockets Server connection")
-            self.ssh_mockets_server.close()
+            logging.info(f"Closing process for {eval_or_train(self._is_testing)}")
+            logging.info("Closing Mockets Receiver connection")
+            # self._mocket_process.terminate()
+            self.mockets_receiver.exec_run(shutdown_mockets,
+                                           detach=True)
+
+            logging.info("Closing Mockets Sender connection")
+            # self.ssh_mockets_server.close()
+            self.mockets_sender.exec_run(shutdown_mockets,
+                                         detach=True)
+
 
             logging.info("Closing GRPC Server...")
             self._server_process.terminate()
@@ -429,26 +428,23 @@ class CongestionControlEnv(Env):
             self._state_queue.close()
 
             logging.info("Closing Background traffic connection")
-            self.ssh_traffic_gen.close()
+            self.bg_sender.exec_run(shutdown_mgen, detach=True)
 
             logging.info("Closing BG Traffic receiver")
-            self.ssh_traffic_rec.close()
+            self.bg_receiver.exec_run(shutdown_mgen, detach=True)
 
-            self._mocket_process = None
             self._server_process = None
 
             # Sleep, increase the chance ssh connections detected close()
             time.sleep(2)
 
-    def _run_mockets_client(self, mockets_server_address, grpc_port,
+    def _run_mockets_sender(self, mockets_receiver_address, grpc_port,
                             mockets_logfile):
-        self._mocket_process = subprocess.Popen(mockets_dist_args(
-            mockets_server_address,
-            grpc_port,
-            self._is_testing,
-            self._max_duration
-        ), stdout=mockets_logfile, stderr=subprocess.STDOUT)
-        self._mocket_process.daemon = True
+        logging.info("Launching Mockets Sender...")
+        self.mockets_sender.exec_run(f"./bin/driver -m client_training "
+                                     f"-address {mockets_receiver_address} "
+                                     f"-marlinServer {ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']}:{grpc_port}", detach=True)
+
 
     def _run_grpc_server(self, port: int):
         """Run the server process"""
@@ -506,7 +502,7 @@ class CongestionControlEnv(Env):
     def _fetch_param_and_update_stats(self) -> int:
         while True:
             try:
-                obs = self._state_queue.get(timeout=3)
+                obs = self._state_queue.get(timeout=30)
             except queue.Empty as error:
                 logging.info(f"Parameter Fetch: Timeout occurred")
                 logging.info("Restarting Service!!")
@@ -572,105 +568,24 @@ class CongestionControlEnv(Env):
             return cwnd
 
     def _run_mockets_ep_client(self):
-        with open(f"mockets_log/client/mockets_client_ep"
-                  f"{self.num_resets}.log", "w+") as log:
-            self._run_mockets_client(self._mockets_server_ip,
-                                     self.grpc_port,
-                                     mockets_logfile=log)
+        # Add logging
+        self._run_mockets_sender(self._mockets_receiver_ip,
+                                 self.grpc_port, None)
 
-    def _run_mockets_server(self):
-        logging.info("Connecting to Mockets Server host machine")
-        while True:
-            try:
-                self.ssh_mockets_server.connect(self._mockets_server_ip,
-                                                username="pi",
-                                                password="raspberry", timeout=60)
-            except paramiko.ssh_exception.NoValidConnectionsError as e:
-                logging.info("Connection failed, new attempt...")
-            except socket.timeout as e:
-                logging.info("Timeout elapsed, new attempt...")
-            except socket.error as e:
-                logging.info("Socket error, new attempt...")
-            else:
-                logging.info("Connected!")
-                break
-
-        logging.info("Launching Mockets Server...")
-        transport = self.ssh_mockets_server.get_transport()
-        channel = transport.open_session()
-        # get_pty allows as to request a pseudo-terminal and bound all the
-        # processes to it (theoretically, usage and docs are kinda confusing...)
-        # It is used so that when the connection is closed also the command
-        # gets its termination.
-        # Changing directory is needed in order to load Mockets conf file
-        # from  that folder
-        channel.get_pty()
-        channel.exec_command(
-                "cd /home/pi/examples/bin/ && "
-                "./examples -ip 0.0.0.0",
-            )
+    def _run_mockets_receiver(self):
+        logging.info("Launching Mockets Receiver...")
+        self.mockets_receiver.exec_run('./bin/driver -m server '
+                                       '-address 0.0.0.0', detach=True)
 
     def _start_traffic_generator(self):
-        logging.info("Connecting to sender host for background traffic")
-        while True:
-            try:
-                self.ssh_traffic_gen.connect(self._traffic_generator_ip,
-                                             username="raffaele",
-                                             password="armageddon12345", timeout=60)
-            except paramiko.ssh_exception.NoValidConnectionsError as e:
-                logging.info("Connection failed, new attempt...")
-            except socket.timeout as e:
-                logging.info("Timeout elapsed, new attempt...")
-            except socket.error as e:
-                logging.info("Socket error, new attempt...")
-            else:
-                logging.info("Connected!")
-                break
-
         logging.info("Starting Background traffic")
         logging.info(f"Script used: {self.traffic_script}")
-        transport = self.ssh_traffic_gen.get_transport()
-        channel = transport.open_session()
-        # get_pty allows as to request a pseudo-terminal and bound all the
-        # processes to it (theoretically, usage and docs are kinda confusing...)
-        # It is used so that when the connection is closed also the command
-        # gets its termination.
-        channel.get_pty()
-        channel.exec_command(
-            "/Users/raffaele/Documents/IHMC/mgen/makefiles/mgen "
-            f"{self.traffic_script}"
-        )
+        self.bg_sender.exec_run(f"./mgen {self.traffic_script}", detach=True)
 
     def _start_traffic_receiver(self):
-        logging.info("Connecting to receiver host for background traffic")
-        while True:
-            try:
-                self.ssh_traffic_rec.connect(self._traffic_receiver_ip,
-                                             username="nomads",
-                                             password="nomads", timeout=60)
-            except paramiko.ssh_exception.NoValidConnectionsError as e:
-                logging.info("Connection failed, new attempt...")
-            except socket.timeout as e:
-                logging.info("Timeout elapsed, new attempt...")
-            except socket.error as e:
-                logging.info("Socket error, new attempt...")
-            else:
-                logging.info("Connected!")
-                break
-
         logging.info("Starting traffic receiver")
-        transport = self.ssh_traffic_rec.get_transport()
-        channel = transport.open_session()
-        # get_pty allows as to request a pseudo-terminal and bound all the
-        # processes to it (theoretically, usage and docs are kinda confusing...)
-        # It is used so that when the connection is closed also the command
-        # gets its termination.
-        channel.get_pty()
-        script = "receiver.mgen"
-        channel.exec_command(
-            "mgen inpuT /home/nomads/Muddasar-mgen/receiver.mgen nolog"
-        )
-        logging.info(f"{script} started!")
+        self.bg_receiver.exec_run('./mgen event "listen udp 4311,4312,4600" event "listen tcp 5311,5312"', detach=True)
+        logging.info(f"Receiver started!")
 
     def _start_background_traffic(self):
         self._start_traffic_receiver()
@@ -690,7 +605,7 @@ class CongestionControlEnv(Env):
         self._action_queue = Queue()
 
         self._run_grpc_server(self.grpc_port)
-        self._run_mockets_server()
+        self._run_mockets_receiver()
         self._start_background_traffic()
         self._run_mockets_ep_client()
 
@@ -733,7 +648,7 @@ class CongestionControlEnv(Env):
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
 
-        self.traffic_script = self.traffic_generator.generate_evaluation_script() if self._is_testing else self.traffic_generator.generate_training_script()
+        self.traffic_script = self.traffic_generator.generate_evaluation_script(receiver_ip=self._traffic_receiver_ip) if self._is_testing else self.traffic_generator.generate_training_script(receiver_ip=self._traffic_receiver_ip)
 
         return initial_state
 

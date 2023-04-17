@@ -7,7 +7,7 @@ from gym import Env
 from gym.spaces import Box, Discrete
 from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 
-import grpc.congestion_control_server as cc_server
+import grpc_server.congestion_control_server as cc_server
 from envs.utils import constants, traffic_generator
 import math
 from envs.utils.constants import Parameters, State,Statistic
@@ -48,7 +48,7 @@ def mockets_gradlew_args(mockets_server_ip: str, grpc_port: int, is_testing: boo
 
     return ['/code/jmockets/gradlew',
             client_type,
-            f"--args=-ip {mockets_server_ip} --grpc-server localhost:"
+            f"--args=-ip {mockets_server_ip} --grpc_server-server localhost:"
             f"{grpc_port} --duration {duration}",
             '-p',
             '/code/jmockets']
@@ -64,7 +64,7 @@ def mockets_dist_args(mockets_server_ip: str, grpc_port: int, is_testing: bool,
     return [path,
             '-ip',
             f'{mockets_server_ip}',
-            '--grpc-server',
+            '--grpc_server-server',
             f'localhost:{grpc_port}',
             '--duration',
             f'{duration}']

@@ -11,22 +11,15 @@ RUN apt-get update && \
     zip \
     net-tools \
     iputils-ping \
+    iproute2 \
     ca-certificates \
-    curl \
-    gnupg \
-    fonts-powerline && \
-    locale-gen en_US.UTF-8 && \
-    adduser --quiet --disabled-password \
-    --shell /bin/zsh --home /home/devuser \
-    --gecos "User" devuser && \
-    echo "devuser:<a href="mailto://p@ssword1">p@ssword1</a>" | \
-    chpasswd &&  usermod -aG sudo devuser
+    curl
 
-USER devuser
-
-RUN mkdir /home/devuser/dev /home/devuser/app
-COPY --chown=devuser . /home/devuser/app
-WORKDIR /home/devuser/app/
+RUN mkdir /home/dev /home/app
+COPY . /home/app
+WORKDIR /home/app/
 RUN unzip -a driver.zip
 
-WORKDIR /home/devuser/app/driver
+WORKDIR /home/app/driver
+CMD /bin/bash
+
