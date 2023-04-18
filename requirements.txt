@@ -2,6 +2,8 @@ grpcio==1.51.1
 grpcio-tools==1.44.0
 protobuf==3.20.3
 netifaces
+huggingface_sb3
+huggingface_hub
 docker
 numpy
 stable-baselines3
