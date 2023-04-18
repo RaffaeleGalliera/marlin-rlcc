@@ -40,10 +40,9 @@ ENV TORCH=1.13.0
 ENV CUDA='cu117'
 
 RUN mkdir /home/devuser/dev /home/devuser/app
-COPY --chown=devuser . /home/devuser/dev
-WORKDIR /home/devuser/dev
+COPY --chown=devuser . /home/devuser/app
+WORKDIR /home/devuser/app
 RUN pip install -e .
-
 
 RUN pip install pyg-lib \
     torch-scatter \

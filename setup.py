@@ -14,7 +14,7 @@ setup(name='marlin',
           "sb3_contrib",
           'optuna',
           "docker",
-          "netifaces"
+          "netifaces",
           "pytest",
           "wandb",
           "seaborn",
