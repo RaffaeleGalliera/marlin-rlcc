@@ -77,6 +77,7 @@ class CongestionControlEnv(Env):
         self.episode_time = 0
         self.action_delay = 0
         self.n_timestep = n_timesteps
+        self._is_testing = is_testing
 
         self.previous_timestamp = 0
         self.mockets_raw_observations = dict((param, 0.0) for param in Parameters)
@@ -98,6 +99,8 @@ class CongestionControlEnv(Env):
         self.mockets_receiver = self.docker_client.containers.get("mn.rh1")
         self.bg_sender = self.docker_client.containers.get("mn.lh2")
         self.bg_receiver = self.docker_client.containers.get("mn.rh2")
+        # Prevent zombie Mockets/Mgen processes running on the container
+        self.cleanup_containers()
 
         # Run server in a different process
         self._server_process = None
@@ -107,7 +110,6 @@ class CongestionControlEnv(Env):
         self._action_queue = None
 
         self.parameter_fetch_error = False
-        self._is_testing = is_testing
         self._max_duration = max_duration
         self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
 
@@ -126,20 +128,7 @@ class CongestionControlEnv(Env):
     def __del__(self):
         """Book-keeping to release resources"""
         if self._server_process is not None:
-            shutdown_mockets = ['sh', '-c', "ps -ef | grep 'mockets' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
-            shutdown_mgen = ['sh', '-c', "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
-
-            logging.info(f"Closing process for {eval_or_train(self._is_testing)}")
-            logging.info("Closing Mockets Receiver connection")
-            # self._mocket_process.terminate()
-            self.mockets_receiver.exec_run(shutdown_mockets,
-                                           detach=True)
-
-            logging.info("Closing Mockets Sender connection")
-            # self.ssh_mockets_server.close()
-            self.mockets_sender.exec_run(shutdown_mockets,
-                                         detach=True)
-
+            self.cleanup_containers()
 
             logging.info("Closing GRPC Server...")
             self._server_process.terminate()
@@ -149,21 +138,33 @@ class CongestionControlEnv(Env):
             self._action_queue.close()
             self._state_queue.close()
 
-            logging.info("Closing Background traffic connection")
-            self.bg_sender.exec_run(shutdown_mgen, detach=True)
-
-            logging.info("Closing BG Traffic receiver")
-            self.bg_receiver.exec_run(shutdown_mgen, detach=True)
-
             self._server_process = None
 
-            # Sleep, increase the chance ssh connections detected close()
-            time.sleep(2)
+    def cleanup_containers(self):
+        shutdown_mockets = ['sh', '-c',
+                            "ps -ef | grep 'mockets' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
+        shutdown_mgen = ['sh', '-c',
+                         "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
+
+        logging.info(f"Closing process for {eval_or_train(self._is_testing)}")
+
+        logging.info("Closing Mockets Receiver connection")
+        self.mockets_receiver.exec_run(shutdown_mockets)
+
+        logging.info("Closing Mockets Sender connection")
+        self.mockets_sender.exec_run(shutdown_mockets)
+
+        logging.info("Closing Background traffic connection")
+        self.bg_sender.exec_run(shutdown_mgen)
+
+        logging.info("Closing BG Traffic receiver")
+        self.bg_receiver.exec_run(shutdown_mgen)
 
     def _run_mockets_sender(self, mockets_receiver_address, grpc_port,
                             mockets_logfile):
         logging.info("Launching Mockets Sender...")
-        self.mockets_sender.exec_run(f"./bin/driver -m client_training "
+        mod = 'client_training' if self._is_testing else 'client_test'
+        self.mockets_sender.exec_run(f"./bin/driver -m {mod} "
                                      f"-address {mockets_receiver_address} "
                                      f"-marlinServer {ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']}:{grpc_port}", detach=True)
 
