@@ -347,7 +347,7 @@ class CongestionControlEnv(Env):
 
         if self._is_testing:
             logging.info("Saving Evaluation Time")
-            with open(f"mockets_log/evaluation.log",
+            with open(f"logs/evaluation_time.log",
                       "w+") as log:
                 log.write(str(time_taken))
 
