@@ -269,10 +269,7 @@ class CongestionControlEnv(Env):
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
-        reward = self.reward(
-            current_traffic_patterns=self.traffic_generator.current_patterns,
-            traffic_timer=self._traffic_timer
-        )
+        reward = self.reward_packets()
         self.episode_return += reward
 
         return reward
@@ -401,6 +398,31 @@ class CongestionControlEnv(Env):
             reward = - 1 / (1 + (self.effective_episode / self.target_episode))
 
         logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
+
+        return reward
+
+    def reward_packets(self):
+        bonus = self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
+
+        rtt_diff = self.state_statistics[State.LAST_RTT][Statistic.DIFF]
+        rtt_min_ema = self.state_statistics[State.MIN_RTT][Statistic.EMA]
+        penalties = 0
+
+        if rtt_diff / (rtt_min_ema + 1) > 0.6:
+            beta = 1
+        elif 0.1 < rtt_diff / (rtt_min_ema + 1) <= 0.6:
+            beta = 0.5
+        elif 0.03 < rtt_diff / (rtt_min_ema + 1) <= 0.1:
+            beta = 0.3
+        else:
+            beta = 0.1
+
+        penalties += beta * rtt_diff / (rtt_min_ema + 1)
+
+        if penalties >= 1:
+            penalties = 0.99
+
+        reward = - 1 / (1 + (bonus/constants.PACKET_SIZE_KB) * (1 - penalties))
 
         return reward
 
