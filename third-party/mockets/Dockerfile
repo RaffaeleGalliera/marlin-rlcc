@@ -18,8 +18,6 @@ RUN apt-get update && \
 RUN mkdir /home/dev /home/app
 COPY . /home/app
 WORKDIR /home/app/
-RUN unzip -a driver.zip
 
-WORKDIR /home/app/driver
 CMD /bin/bash
 

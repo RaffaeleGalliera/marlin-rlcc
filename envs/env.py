@@ -163,10 +163,17 @@ class CongestionControlEnv(Env):
     def _run_mockets_sender(self, mockets_receiver_address, grpc_port,
                             mockets_logfile):
         logging.info("Launching Mockets Sender...")
-        mod = 'client_training' if self._is_testing else 'client_test'
-        self.mockets_sender.exec_run(f"./bin/driver -m {mod} "
-                                     f"-address {mockets_receiver_address} "
-                                     f"-marlinServer {ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']}:{grpc_port}", detach=True)
+        if self._is_testing:
+            self.mockets_sender.exec_run(f"./testing/examples/bin/examples "
+                                     f"-ip {mockets_receiver_address} "
+                                     f"--grpc-server {ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']}:{grpc_port} "
+                                     f"--duration {self._max_duration}", detach=True)
+        else:
+            self.mockets_sender.exec_run(f"./training/examples/bin/examples "
+                                         f"-ip {mockets_receiver_address} "
+                                         f"--grpc-server {ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']}:{grpc_port} "
+                                         f"--duration {self._max_duration}",
+                                         detach=True)
 
 
     def _run_grpc_server(self, port: int):
@@ -297,8 +304,8 @@ class CongestionControlEnv(Env):
 
     def _run_mockets_receiver(self):
         logging.info("Launching Mockets Receiver...")
-        self.mockets_receiver.exec_run('./bin/driver -m server '
-                                       '-address 0.0.0.0', detach=True)
+        self.mockets_receiver.exec_run('./receiver/examples/bin/examples '
+                                       '-ip 0.0.0.0', detach=True)
 
     def _start_traffic_generator(self):
         logging.info("Starting Background traffic")
