@@ -1,6 +1,7 @@
 import time
 from multiprocessing import Queue, Process
 import queue
+import os
 import numpy as np
 import logging
 from gym import Env
@@ -112,6 +113,11 @@ class CongestionControlEnv(Env):
         self.parameter_fetch_error = False
         self._max_duration = max_duration
         self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
+        
+        #Parameters for random variations link characteristics, bandwidth and latency at the moment
+        self.random_variation_step = max_time_steps_per_episode/3 if self._is_testing else np.random.randint(max_time_steps_per_episode/4, 3*max_time_steps_per_episode/4)
+        self.random_bandwidth_variation = 0.1 + np.random.random_sample()
+        self.random_latency_variation = np.random.randint(50, 100)
 
         self.traffic_generator = traffic_generator.TrafficGenerator()
         self._traffic_timer = None
@@ -336,6 +342,21 @@ class CongestionControlEnv(Env):
             self.episode_start_time = time.time()
         logging.info("All commands executed. Episode started!")
 
+    def link_variation(self, bw, latency):
+        #tc commands to change link parameters
+        logging.info("Setting Bandwidth to " + str(bw) + "Mbit and latency to " + str(latency) + " in lh1-eth0")
+        self.mockets_sender.exec_run('tc qdisc del dev lh1-eth0 root')
+        self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 root handle 5: tbf rate ' + str(bw) + 'Mbit burst 15000 latency '+ str(latency) +'ms')
+        #self.mockets_sender.exec_run('tc class add dev lh1-eth0 parent 5:0 classid 5:1 htb rate 100Mbit latency_ms 10 burst 15k')
+
+        #iperf commands to check link variation
+        #self.mockets_sender.exec_run('iperf -s &')
+        print(self.mockets_sender.exec_run('tc qdisc show dev lh1-eth0'))
+        os.system('pkill -f \'iperf -s\'')
+        os.system('pkill -f \'iperf -c\'')
+
+        logging.info("Bandwidth and latency of the link changed successfully")
+
     def report(self):
         time_taken = time.time() - self.episode_start_time
         logging.info(f"EPISODE {self.num_resets} {eval_or_train(self._is_testing)} COMPLETED")
@@ -367,6 +388,10 @@ class CongestionControlEnv(Env):
         self.episode_return = 0
         self.target_episode = 0
         self.effective_episode = 0
+
+        self.random_variation_step = self.max_time_steps_per_episode/3 if self._is_testing else np.random.randint(self.max_time_steps_per_episode/4, 3*self.max_time_steps_per_episode/4)
+        self.random_bandwidth_variation = 0.1 + np.random.random_sample()
+        self.random_latency_variation = np.random.randint(50, 100)
 
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
@@ -418,6 +443,9 @@ class CongestionControlEnv(Env):
         if self.current_step == 1:
             self._start_external_processes()
             self.state = self._next_state()
+
+        if self.current_step == self.random_variation_step:
+            self.link_variation(self.random_bandwidth_variation, self.random_latency_variation)
 
         cwnd_value = self._cwnd_update_throttle(action[0])
 

@@ -2,6 +2,7 @@ from mininet.cli import CLI
 from mininet.net import Containernet, Mininet
 from mininet.node import Node, Controller
 from mininet.link import TCIntf
+from mininet.link import TCLink
 from mininet.topo import Topo
 from mininet.log import info, setLogLevel
 
@@ -98,15 +99,15 @@ class DumbbellTopology(Topo):
 
         # Add links
         info('*** Connect the switches to the router\n')
-        self.addLink(ls1, r0, intf=TCIntf, delay='50ms', bw=2,
+        self.addLink(ls1, r0, cls=TCLink, intf=TCIntf, delay='50ms', bw=2,
                      params2={'ip': '10.0.1.254/24'})
         self.addLink(rs1, r0, intf=TCIntf, params2={'ip': '10.0.2.254/24'})
 
         info("*** Connect the switches to the hosts\n")
-        self.addLink(lh1, ls1, intf=TCIntf)
-        self.addLink(lh2, ls1, intf=TCIntf)
-        self.addLink(rh1, rs1, intf=TCIntf)
-        self.addLink(rh2, rs1, intf=TCIntf)
+        self.addLink(lh1, ls1, cls=TCLink, intf=TCIntf)
+        self.addLink(lh2, ls1, cls=TCLink, intf=TCIntf)
+        self.addLink(rh1, rs1, cls=TCLink, intf=TCIntf)
+        self.addLink(rh2, rs1, cls=TCLink, intf=TCIntf)
 
 
 CLI.do_updateLat = update_lat
