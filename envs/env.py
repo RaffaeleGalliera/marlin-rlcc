@@ -299,10 +299,7 @@ class CongestionControlEnv(Env):
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
-        reward = self.reward(
-            current_traffic_patterns=self.traffic_generator.current_patterns,
-            traffic_timer=self._traffic_timer
-        )
+        reward = self.reward_packets()
         self.episode_return += reward
 
         return reward
@@ -417,32 +414,29 @@ class CongestionControlEnv(Env):
 
         return initial_state
 
-    def reward(self, current_traffic_patterns, traffic_timer):
-        elapsed_time_in_period = float(time.time() - traffic_timer) % 8
+    def reward_packets(self):
+        bonus = self.state_statistics[State.ACKED_BYTES_TIMEFRAME][
+            Statistic.LAST]
 
-        target_goodput = constants.LINK_BANDWIDTH_KB - traffic_generator.MICE_FLOWS_KB_S
-        time_since_last = time.time() - self.last_step_timestamp
+        rtt_diff = self.state_statistics[State.LAST_RTT][Statistic.DIFF]
+        rtt_min_ema = self.state_statistics[State.MIN_RTT][Statistic.EMA]
+        penalties = 0
 
-        if 0 <= elapsed_time_in_period <= 2:
-            target_goodput = target_goodput - current_traffic_patterns[0].packets
-        elif 2 < elapsed_time_in_period <= 4:
-            target_goodput = target_goodput - current_traffic_patterns[1].packets
-        elif 4 < elapsed_time_in_period <= 6:
-            target_goodput = target_goodput - current_traffic_patterns[2].packets
-        elif 6 < elapsed_time_in_period < 8:
-            target_goodput = target_goodput - current_traffic_patterns[3].packets
-
-        self.effective_episode += self.state_statistics[State.SENT_GOOD_BYTES_TIMEFRAME][Statistic.LAST]
-        # Count loss for target
-        self.target_episode += target_goodput * time_since_last * 0.97
-
-
-        if self.effective_episode > self.target_episode:
-            reward = - 1 / 2
+        if rtt_diff / (rtt_min_ema + 1) > 0.6:
+            beta = 1
+        elif 0.1 < rtt_diff / (rtt_min_ema + 1) <= 0.6:
+            beta = 0.5
+        elif 0.03 < rtt_diff / (rtt_min_ema + 1) <= 0.1:
+            beta = 0.3
         else:
-            reward = - 1 / (1 + (self.effective_episode / self.target_episode))
+            beta = 0.1
 
-        logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
+        penalties += beta * rtt_diff / (rtt_min_ema + 1)
+
+        if penalties >= 1:
+            penalties = 0.99
+
+        reward = - 1 / (1 + (bonus / constants.PACKET_SIZE_KB) * (1 - penalties))
 
         return reward
 
