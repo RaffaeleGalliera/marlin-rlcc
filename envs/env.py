@@ -59,7 +59,8 @@ class CongestionControlEnv(Env):
                  observation_length: int = len(State) * len(Statistic),
                  is_testing: bool = False,
                  max_duration: int = 80,
-                 max_time_steps_per_episode: int = 200):
+                 max_time_steps_per_episode: int = 200,
+                 **kwargs):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -70,6 +71,7 @@ class CongestionControlEnv(Env):
                                      high=float("inf"),
                                      shape=(observation_length, ))
 
+        self.env_kwargs = {'bandwidth': kwargs.get('bandwidth', 0.5), 'latency': kwargs.get('latency', 10)}
         self.current_step = 0
         self.total_steps = 0
         self.num_resets = 0
@@ -115,9 +117,11 @@ class CongestionControlEnv(Env):
         self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
         
         #Parameters for random variations link characteristics, bandwidth and latency at the moment
-        self.random_variation_step = max_time_steps_per_episode/3 if self._is_testing else np.random.randint(max_time_steps_per_episode/4, 3*max_time_steps_per_episode/4)
-        self.random_bandwidth_variation = 0.1 + np.random.random_sample()
-        self.random_latency_variation = np.random.randint(50, 100)
+        self.random_variation_step = int(max_time_steps_per_episode/3) if self._is_testing else np.random.randint(max_time_steps_per_episode/4, 3*max_time_steps_per_episode/4)
+        self.bandwidth = self.env_kwargs.get('bandwidth')
+        self.latency = self.env_kwargs.get('latency')
+        #self.random_bandwidth_variation = 0.1 + np.random.random_sample()
+        #self.random_latency_variation = np.random.randint(50, 100)
 
         self.traffic_generator = traffic_generator.TrafficGenerator()
         self._traffic_timer = None
@@ -342,21 +346,19 @@ class CongestionControlEnv(Env):
             self.episode_start_time = time.time()
         logging.info("All commands executed. Episode started!")
 
+    def set_random_variation_step(self):
+        random_step = int(self.max_time_steps_per_episode/3) if self._is_testing else np.random.randint(self.max_time_steps_per_episode/4, 3*self.max_time_steps_per_episode/4)
+        return random_step
+        
+
     def link_variation(self, bw, latency):
         #tc commands to change link parameters
-        logging.info("Setting Bandwidth to " + str(bw) + "Mbit and latency to " + str(latency) + " in lh1-eth0")
+        logging.info("Setting Bandwidth to " + str(bw) + "Mbit and latency to " + str(latency) + "ms in lh1-eth0")
         self.mockets_sender.exec_run('tc qdisc del dev lh1-eth0 root')
         self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 root handle 5: tbf rate ' + str(bw) + 'Mbit burst 15000 latency '+ str(latency) +'ms')
-        #self.mockets_sender.exec_run('tc class add dev lh1-eth0 parent 5:0 classid 5:1 htb rate 100Mbit latency_ms 10 burst 15k')
-
-        #iperf commands to check link variation
-        #self.mockets_sender.exec_run('iperf -s &')
+        
         print(self.mockets_sender.exec_run('tc qdisc show dev lh1-eth0'))
-        os.system('pkill -f \'iperf -s\'')
-        os.system('pkill -f \'iperf -c\'')
-
-        logging.info("Bandwidth and latency of the link changed successfully")
-
+        
     def report(self):
         time_taken = time.time() - self.episode_start_time
         logging.info(f"EPISODE {self.num_resets} {eval_or_train(self._is_testing)} COMPLETED")
@@ -389,9 +391,8 @@ class CongestionControlEnv(Env):
         self.target_episode = 0
         self.effective_episode = 0
 
-        self.random_variation_step = self.max_time_steps_per_episode/3 if self._is_testing else np.random.randint(self.max_time_steps_per_episode/4, 3*self.max_time_steps_per_episode/4)
-        self.random_bandwidth_variation = 0.1 + np.random.random_sample()
-        self.random_latency_variation = np.random.randint(50, 100)
+        self.random_variation_step = self.set_random_variation_step()
+        self.link_variation(1.0, 100)
 
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
@@ -445,7 +446,7 @@ class CongestionControlEnv(Env):
             self.state = self._next_state()
 
         if self.current_step == self.random_variation_step:
-            self.link_variation(self.random_bandwidth_variation, self.random_latency_variation)
+            self.link_variation(self.bandwidth, self.latency)
 
         cwnd_value = self._cwnd_update_throttle(action[0])
 
