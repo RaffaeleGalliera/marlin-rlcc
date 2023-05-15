@@ -60,7 +60,13 @@ class CongestionControlEnv(Env):
                  is_testing: bool = False,
                  max_duration: int = 80,
                  max_time_steps_per_episode: int = 200,
-                 **kwargs):
+                 bandwidth_start = 1.0, 
+                 latency_start = 100, 
+                 bandwidth_var = 0.5, 
+                 latency_var = 10,
+                 variation_range_start = 50,
+                 variation_range_end = 150, 
+                 random_seed = 1):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -71,7 +77,7 @@ class CongestionControlEnv(Env):
                                      high=float("inf"),
                                      shape=(observation_length, ))
 
-        self.env_kwargs = {'bandwidth': kwargs.get('bandwidth', 0.5), 'latency': kwargs.get('latency', 10)}
+        np.random.seed(int(random_seed))
         self.current_step = 0
         self.total_steps = 0
         self.num_resets = 0
@@ -79,7 +85,11 @@ class CongestionControlEnv(Env):
         self.episode_start_time = 0
         self.episode_time = 0
         self.action_delay = 0
+        self.bandwidth_start = bandwidth_start
+        self.latency_start = latency_start
         self.n_timestep = n_timesteps
+        self.variation_range_start = variation_range_start
+        self.variation_range_end = variation_range_end 
         self._is_testing = is_testing
 
         self.previous_timestamp = 0
@@ -117,11 +127,10 @@ class CongestionControlEnv(Env):
         self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
         
         #Parameters for random variations link characteristics, bandwidth and latency at the moment
-        self.random_variation_step = int(max_time_steps_per_episode/3) if self._is_testing else np.random.randint(max_time_steps_per_episode/4, 3*max_time_steps_per_episode/4)
-        self.bandwidth = self.env_kwargs.get('bandwidth')
-        self.latency = self.env_kwargs.get('latency')
-        #self.random_bandwidth_variation = 0.1 + np.random.random_sample()
-        #self.random_latency_variation = np.random.randint(50, 100)
+        
+        self.random_variation_step = self.variation_range_start if self._is_testing else np.random.randint(self.variation_range_start, self.variation_range_end)
+        self.bandwidth_var = bandwidth_var
+        self.latency_var = latency_var
 
         self.traffic_generator = traffic_generator.TrafficGenerator()
         self._traffic_timer = None
@@ -347,8 +356,7 @@ class CongestionControlEnv(Env):
         logging.info("All commands executed. Episode started!")
 
     def set_random_variation_step(self):
-        random_step = int(self.max_time_steps_per_episode/3) if self._is_testing else np.random.randint(self.max_time_steps_per_episode/4, 3*self.max_time_steps_per_episode/4)
-        return random_step
+        return self.random_variation_step
         
 
     def link_variation(self, bw, latency):
@@ -392,7 +400,7 @@ class CongestionControlEnv(Env):
         self.effective_episode = 0
 
         self.random_variation_step = self.set_random_variation_step()
-        self.link_variation(1.0, 100)
+        self.link_variation(self.bandwidth_start, self.latency_start)
 
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
@@ -446,7 +454,7 @@ class CongestionControlEnv(Env):
             self.state = self._next_state()
 
         if self.current_step == self.random_variation_step:
-            self.link_variation(self.bandwidth, self.latency)
+            self.link_variation(self.bandwidth_var, self.latency_var)
 
         cwnd_value = self._cwnd_update_throttle(action[0])
 
