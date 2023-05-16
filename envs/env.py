@@ -60,14 +60,14 @@ class CongestionControlEnv(Env):
                  is_testing: bool = False,
                  max_duration: int = 80,
                  max_time_steps_per_episode: int = 200,
-                 bandwidth_start = 1.0, 
-                 latency_start = 100, 
+                 bandwidth_start = 1.0,
+                 latency_start = 100,
                  loss_start = 0,
-                 bandwidth_var = 0.5, 
+                 bandwidth_var = 0.5,
                  latency_var = 10,
                  loss_var = 0,
                  variation_range_start = 50,
-                 variation_range_end = 150, 
+                 variation_range_end = 150,
                  random_seed = 1):
         """
         :param eps: the epsilon bound for correct value
@@ -87,12 +87,13 @@ class CongestionControlEnv(Env):
         self.episode_start_time = 0
         self.episode_time = 0
         self.action_delay = 0
+        self.current_bandwidth = 0
         self.bandwidth_start = bandwidth_start
         self.latency_start = latency_start
         self.loss_start = loss_start
         self.n_timestep = n_timesteps
         self.variation_range_start = variation_range_start
-        self.variation_range_end = variation_range_end 
+        self.variation_range_end = variation_range_end
         self._is_testing = is_testing
 
         self.previous_timestamp = 0
@@ -128,9 +129,9 @@ class CongestionControlEnv(Env):
         self.parameter_fetch_error = False
         self._max_duration = max_duration
         self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
-        
+
         #Parameters for random variations link characteristics, bandwidth and latency at the moment
-        
+
         self.random_variation_step = self.variation_range_start if self._is_testing else np.random.randint(self.variation_range_start, self.variation_range_end)
         self.bandwidth_var = bandwidth_var
         self.latency_var = latency_var
@@ -139,7 +140,7 @@ class CongestionControlEnv(Env):
         self.traffic_generator = traffic_generator.TrafficGenerator()
         self._traffic_timer = None
         self.episode_training_script = None
-        self.episode_evaluation_script = self.traffic_generator.generate_evaluation_script(receiver_ip=self._traffic_receiver_ip)
+        self.episode_evaluation_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
 
         self.traffic_script = None
         self.target_episode = 0
@@ -164,10 +165,13 @@ class CongestionControlEnv(Env):
             self._server_process = None
 
     def cleanup_containers(self):
+        self.cleanup_mockets()
+        self.cleanup_background_traffic()
+
+
+    def cleanup_mockets(self):
         shutdown_mockets = ['sh', '-c',
                             "ps -ef | grep 'mockets' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
-        shutdown_mgen = ['sh', '-c',
-                         "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
         logging.info(f"Closing process for {eval_or_train(self._is_testing)}")
 
@@ -176,6 +180,10 @@ class CongestionControlEnv(Env):
 
         logging.info("Closing Mockets Sender connection")
         self.mockets_sender.exec_run(shutdown_mockets)
+
+    def cleanup_background_traffic(self):
+        shutdown_mgen = ['sh', '-c',
+                         "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
         logging.info("Closing Background traffic connection")
         self.bg_sender.exec_run(shutdown_mgen)
@@ -299,7 +307,10 @@ class CongestionControlEnv(Env):
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
-        reward = self.reward_packets()
+        reward = self.reward(
+            current_traffic_patterns=self.traffic_generator.current_patterns,
+            traffic_timer=self._traffic_timer
+        )
         self.episode_return += reward
 
         return reward
@@ -362,17 +373,18 @@ class CongestionControlEnv(Env):
         if reset_time:
             self.episode_start_time = time.time()
         logging.info("All commands executed. Episode started!")
-        
+
 
     def link_variation(self, bw, latency, loss):
         #tc commands to change link parameters
+        self.current_bandwidth = bw
         logging.info("Setting Bandwidth to " + str(bw) + "Mbit and latency to " + str(latency) + "ms in lh1-eth0")
         self.mockets_sender.exec_run('tc qdisc del dev lh1-eth0 root')
         print(self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 root handle 5:0 tbf rate ' + str(bw) + 'Mbit burst 15000 limit 100000'))
         print(self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 parent 5:0 netem delay ' + str(latency) + 'ms loss ' + str(loss) + '%'))
 
         logging.info("Link parameters set successfully to " + str(bw) + "Mbit, latency to " + str(latency) + "ms and packet loss to " + str(loss) + '%')
-        
+
     def report(self):
         time_taken = time.time() - self.episode_start_time
         logging.info(f"EPISODE {self.num_resets} {eval_or_train(self._is_testing)} COMPLETED")
@@ -404,39 +416,42 @@ class CongestionControlEnv(Env):
         self.episode_return = 0
         self.target_episode = 0
         self.effective_episode = 0
-        
+
         self.link_variation(self.bandwidth_start, self.latency_start, self.loss_start)
 
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
 
-        self.traffic_script = self.traffic_generator.generate_evaluation_script(receiver_ip=self._traffic_receiver_ip) if self._is_testing else self.traffic_generator.generate_training_script(receiver_ip=self._traffic_receiver_ip)
+        self.traffic_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
 
         return initial_state
 
-    def reward_packets(self):
-        bonus = self.state_statistics[State.ACKED_BYTES_TIMEFRAME][
-            Statistic.LAST]
+    def reward(self, current_traffic_patterns, traffic_timer):
+        elapsed_time_in_period = float(time.time() - traffic_timer) % 8
 
-        rtt_diff = self.state_statistics[State.LAST_RTT][Statistic.DIFF]
-        rtt_min_ema = self.state_statistics[State.MIN_RTT][Statistic.EMA]
-        penalties = 0
+        target_goodput = self.current_bandwidth * 125 - self.traffic_generator.mice_flows_kbs
+        time_since_last = time.time() - self.last_step_timestamp
 
-        if rtt_diff / (rtt_min_ema + 1) > 0.6:
-            beta = 1
-        elif 0.1 < rtt_diff / (rtt_min_ema + 1) <= 0.6:
-            beta = 0.5
-        elif 0.03 < rtt_diff / (rtt_min_ema + 1) <= 0.1:
-            beta = 0.3
+        if 0 <= elapsed_time_in_period <= 2:
+            target_goodput = target_goodput - current_traffic_patterns[0].packets
+        elif 2 < elapsed_time_in_period <= 4:
+            target_goodput = target_goodput - current_traffic_patterns[1].packets
+        elif 4 < elapsed_time_in_period <= 6:
+            target_goodput = target_goodput - current_traffic_patterns[2].packets
+        elif 6 < elapsed_time_in_period < 8:
+            target_goodput = target_goodput - current_traffic_patterns[3].packets
+
+        self.effective_episode += self.state_statistics[State.SENT_GOOD_BYTES_TIMEFRAME][Statistic.LAST]
+        # Count loss for target
+        self.target_episode += target_goodput * time_since_last * 0.97
+
+
+        if self.effective_episode > self.target_episode:
+            reward = - 1 / 2
         else:
-            beta = 0.1
+            reward = - 1 / (1 + (self.effective_episode / self.target_episode))
 
-        penalties += beta * rtt_diff / (rtt_min_ema + 1)
-
-        if penalties >= 1:
-            penalties = 0.99
-
-        reward = - 1 / (1 + (bonus / constants.PACKET_SIZE_KB) * (1 - penalties))
+        logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
 
         return reward
 
@@ -457,6 +472,12 @@ class CongestionControlEnv(Env):
 
         if self.current_step == self.random_variation_step:
             self.link_variation(self.bandwidth_var, self.latency_var, self.loss_var)
+            self.cleanup_background_traffic()
+            self.traffic_script = self.traffic_generator.generate_script_new_link(
+                receiver_ip=self._traffic_receiver_ip,
+                factor=self.bandwidth_var/self.bandwidth_start
+            )
+            self._start_background_traffic()
 
         cwnd_value = self._cwnd_update_throttle(action[0])
 
@@ -490,4 +511,3 @@ class CongestionControlEnv(Env):
 
     def render(self, mode: str = "console") -> None:
         pass
-        

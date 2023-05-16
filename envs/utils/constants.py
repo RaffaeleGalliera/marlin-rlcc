@@ -93,9 +93,7 @@ class State(Enum):
 MAXIMUM_SEGMENT_SIZE = None
 # Increment/Decrement in % to be applied to the cwnd
 ALPHA = 1 / 8  # Alfa for EMA
-GRPC_FLOAT_UPPER_LIMIT = 100000
-CWND_UPPER_LIMIT_BYTES = 50000
-LINK_BANDWIDTH_KB = 250
+CWND_UPPER_LIMIT_BYTES = 1000000
 PACKET_SIZE_KB = 1.444
 UNIT_FACTOR = 1000
 DIST_PATH = '/code/marlin/mockets_distributions'
