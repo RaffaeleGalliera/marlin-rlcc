@@ -364,10 +364,10 @@ class CongestionControlEnv(Env):
         #tc commands to change link parameters
         logging.info("Setting Bandwidth to " + str(bw) + "Mbit and latency to " + str(latency) + "ms in lh1-eth0")
         self.mockets_sender.exec_run('tc qdisc del dev lh1-eth0 root')
-        self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 root handle 5:0 tbf rate ' + str(bw) + 'Mbit burst 15000 latency ' + str(latency)+ 'ms')
-        self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 parent 5:0 netem loss ' + str(loss) + '%')
+        print(self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 root handle 5:0 tbf rate ' + str(bw) + 'Mbit burst 15000 limit 100000'))
+        print(self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 parent 5:0 netem delay ' + str(latency) + 'ms loss ' + str(loss) + '%'))
 
-        logging.info("Link parameters set successfully to " + str(bw) + "Mbit, latency to " + str(latency) + "ms and latency to " + str(loss) + '%')
+        logging.info("Link parameters set successfully to " + str(bw) + "Mbit, latency to " + str(latency) + "ms and packet loss to " + str(loss) + '%')
         
     def report(self):
         time_taken = time.time() - self.episode_start_time
@@ -489,3 +489,4 @@ class CongestionControlEnv(Env):
 
     def render(self, mode: str = "console") -> None:
         pass
+        
