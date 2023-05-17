@@ -139,7 +139,7 @@ class CongestionControlEnv(Env):
         self.latency_var = latency_var
         self.loss_var = loss_var
 
-        self.traffic_generator = traffic_generator.TrafficGenerator()
+        self.traffic_generator = traffic_generator.TrafficGenerator(link_capacity_mbps=self.bandwidth_start)
         self._traffic_timer = None
         self.episode_training_script = None
         self.episode_evaluation_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
