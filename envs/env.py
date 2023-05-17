@@ -88,6 +88,8 @@ class CongestionControlEnv(Env):
         self.episode_time = 0
         self.action_delay = 0
         self.current_bandwidth = 0
+        self.current_latency = 0
+        self.current_loss = 0
         self.bandwidth_start = bandwidth_start
         self.latency_start = latency_start
         self.loss_start = loss_start
@@ -378,7 +380,11 @@ class CongestionControlEnv(Env):
     def link_variation(self, bw, latency, loss):
         #tc commands to change link parameters
         self.current_bandwidth = bw
+        self.current_latency = latency
+        self.current_loss = loss
+
         logging.info("Setting Bandwidth to " + str(bw) + "Mbit and latency to " + str(latency) + "ms in lh1-eth0")
+
         self.mockets_sender.exec_run('tc qdisc del dev lh1-eth0 root')
         print(self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 root handle 5:0 tbf rate ' + str(bw) + 'Mbit burst 15000 limit 100000'))
         print(self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 parent 5:0 netem delay ' + str(latency) + 'ms loss ' + str(loss) + '%'))
@@ -443,7 +449,8 @@ class CongestionControlEnv(Env):
 
         self.effective_episode += self.state_statistics[State.SENT_GOOD_BYTES_TIMEFRAME][Statistic.LAST]
         # Count loss for target
-        self.target_episode += target_goodput * time_since_last * 0.97
+        self.target_episode += target_goodput * time_since_last
+        self.target_episode -= self.target_episode * self.current_loss/100
 
 
         if self.effective_episode > self.target_episode:
