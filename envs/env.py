@@ -170,10 +170,13 @@ class CongestionControlEnv(Env):
             self._server_process = None
 
     def cleanup_containers(self):
+        self.cleanup_mockets()
+        self.cleanup_background_traffic()
+
+
+    def cleanup_mockets(self):
         shutdown_mockets = ['sh', '-c',
                             "ps -ef | grep 'mockets' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
-        shutdown_mgen = ['sh', '-c',
-                         "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
         logging.info(f"Closing process for {eval_or_train(self._is_testing)}")
 
@@ -182,6 +185,10 @@ class CongestionControlEnv(Env):
 
         logging.info("Closing Mockets Sender connection")
         self.mockets_sender.exec_run(shutdown_mockets)
+
+    def cleanup_background_traffic(self):
+        shutdown_mgen = ['sh', '-c',
+                         "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
         logging.info("Closing Background traffic connection")
         self.bg_sender.exec_run(shutdown_mgen)
@@ -195,7 +202,7 @@ class CongestionControlEnv(Env):
         mod = 'client_training' if self._is_testing else 'client_test'
         self.mockets_sender.exec_run(f"./bin/driver -m {mod} "
                                      f"-address {mockets_receiver_address} "
-                                     f"-marlinServer {ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']}:{grpc_port}", detach=True)
+                                     f"-marlinServer {self.host_address}:{grpc_port}", detach=True)
 
 
     def _run_grpc_server(self, port: int):
@@ -424,7 +431,7 @@ class CongestionControlEnv(Env):
     def reward(self, current_traffic_patterns, traffic_timer):
         elapsed_time_in_period = float(time.time() - traffic_timer) % 8
 
-        target_goodput = constants.LINK_BANDWIDTH_KB - traffic_generator.MICE_FLOWS_KB_S
+        target_goodput = self.current_bandwidth * 125 - self.traffic_generator.mice_flows_kbs
         time_since_last = time.time() - self.last_step_timestamp
 
         if 0 <= elapsed_time_in_period <= 2:
@@ -438,7 +445,8 @@ class CongestionControlEnv(Env):
 
         self.effective_episode += self.state_statistics[State.SENT_GOOD_BYTES_TIMEFRAME][Statistic.LAST]
         # Count loss for target
-        self.target_episode += target_goodput * time_since_last * 0.97
+        self.target_episode += target_goodput * time_since_last
+        self.target_episode -= self.target_episode * self.current_loss/100
 
 
         if self.effective_episode > self.target_episode:
@@ -466,7 +474,13 @@ class CongestionControlEnv(Env):
             self.state = self._next_state()
 
         if self.current_step == self.random_variation_step:
-            self.link_variation(self.bandwidth_var, self.latency_var, self.loss_var)
+            self.link_variation(self.bandwidth_var, self.delay_var, self.loss_var)
+            self.cleanup_background_traffic()
+            self.traffic_script = self.traffic_generator.generate_script_new_link(
+                receiver_ip=self._traffic_receiver_ip,
+                factor=self.bandwidth_var/self.bandwidth_start
+            )
+            self._start_background_traffic()
 
         cwnd_value = self._cwnd_update_throttle(action[0])
 

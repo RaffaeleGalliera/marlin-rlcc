@@ -2,8 +2,6 @@ import random
 import logging
 import itertools
 
-MICE_FLOWS_KB_S = 20
-
 class TrafficPattern:
     def __init__(self,
                  packets: float,
@@ -18,22 +16,32 @@ class TrafficPattern:
 class TrafficGenerator:
     def __init__(self,
                  period_duration_seconds: int = 10,
+                 link_capacity_mbps: float = 1,
                  seed: int = 9,
                  ):
 
         self.period_duration_seconds = period_duration_seconds
         self.seed = seed
         self.n_episode = 0
+        self.link_capacity_kilo_bytes_ps = link_capacity_mbps * 125
+        self.tcp_elephant = TrafficPattern(self.link_capacity_kilo_bytes_ps * .8,
+                                           "TCP",
+                                           5311)
+        self.udp_elephant = TrafficPattern(self.link_capacity_kilo_bytes_ps * .4,
+                                           "UDP",
+                                           4311)
+        self.tcp_mice = TrafficPattern(self.link_capacity_kilo_bytes_ps * .001332,
+                                       "TCP",
+                                       5312)
+        self.udp_mice = TrafficPattern(self.link_capacity_kilo_bytes_ps * .2,
+                                       "UDP",
+                                       4312)
+        self.extra_udp = TrafficPattern(self.link_capacity_kilo_bytes_ps * .208,
+                                        "UDP",
+                                        4600)
+        self.mice_flows_kbs = self.link_capacity_kilo_bytes_ps * .08
 
-        self.tcp_elephant = TrafficPattern(200, "TCP", 5311)
-        self.udp_elephant = TrafficPattern(100, "UDP", 4311)
-
-        self.tcp_mice = TrafficPattern(0.333, "TCP", 5312)
-        self.udp_mice = TrafficPattern(52, "UDP", 4312)
-
-        self.extra_mice = TrafficPattern(50, "UDP", 4600)
-
-        self.traffic_patterns = (self.udp_elephant, self.tcp_elephant, self.udp_elephant, self.extra_mice)
+        self.traffic_patterns = (self.udp_elephant, self.tcp_elephant, self.udp_elephant, self.extra_udp)
         self.training_patterns = list(itertools.permutations(self.traffic_patterns))
         self.evaluation_pattern = self.traffic_patterns
 
@@ -41,22 +49,59 @@ class TrafficGenerator:
 
         random.seed(9)
 
-    def generate_training_script(self, receiver_ip):
+
+    def reset_elephant_to_default(self):
+        self.tcp_elephant.packets = self.link_capacity_kilo_bytes_ps * .8
+        self.udp_elephant.packets = self.link_capacity_kilo_bytes_ps * .4
+        self.extra_udp.packets = self.link_capacity_kilo_bytes_ps * .208
+
+
+    def reset_mice_to_default(self):
+        self.udp_mice.packets = self.link_capacity_kilo_bytes_ps * .2
+        self.tcp_mice.packets = self.link_capacity_kilo_bytes_ps * .001332
+        self.mice_flows_kbs = self.link_capacity_kilo_bytes_ps * .08
+
+
+    def random_packets_number(self):
+        return random.randint(int(self.link_capacity_kilo_bytes_ps * .05),
+                              int(self.link_capacity_kilo_bytes_ps * .8))
+    def generate_random_script(self, receiver_ip):
         logging.info("Choosing Training Pattern for next episode")
 
-        tcp_elephant = TrafficPattern(random.randint(10, 200), "TCP", 5311)
-        udp_elephant = TrafficPattern(random.randint(10, 200), "UDP", 4311)
-        extra_mice = TrafficPattern(random.randint(10, 200), "UDP", 4600)
+        self.tcp_elephant.packets = self.random_packets_number()
+        self.udp_elephant.packets = self.random_packets_number()
+        self.extra_udp.packets = self.random_packets_number()
+        self.reset_mice_to_default()
 
-        pattern = [udp_elephant, tcp_elephant, udp_elephant, extra_mice]
+        pattern = [self.udp_elephant, self.tcp_elephant, self.udp_elephant, self.extra_udp]
         random.shuffle(pattern)
         self.current_patterns = tuple(pattern)
 
         return self.generate_script(self.current_patterns, receiver_ip)
 
-    def generate_evaluation_script(self, receiver_ip):
+    def generate_fixed_script(self, receiver_ip):
         logging.info("Choosing Eval Pattern for next episode")
+
+        # Set to default values
+        self.reset_elephant_to_default()
+        self.reset_mice_to_default()
         self.current_patterns = self.evaluation_pattern
+
+        pattern = [self.udp_elephant, self.tcp_elephant, self.udp_elephant, self.extra_udp]
+        self.current_patterns = tuple(pattern)
+
+        return self.generate_script(self.current_patterns, receiver_ip)
+
+    def generate_script_new_link(self, receiver_ip, factor):
+        # UDP elephant traffic is excluded when changing the link capacity
+        self.tcp_elephant.packets *= factor
+        self.tcp_mice.packets *= factor
+        self.udp_mice.packets *= factor
+        self.extra_udp.packets *= factor
+        self.mice_flows_kbs *= factor
+
+        pattern = [self.tcp_elephant, self.extra_udp, self.tcp_elephant, self.extra_udp]
+        self.current_patterns = tuple(pattern)
 
         return self.generate_script(self.current_patterns, receiver_ip)
 
