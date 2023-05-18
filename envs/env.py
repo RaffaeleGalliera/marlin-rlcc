@@ -273,6 +273,7 @@ class CongestionControlEnv(Env):
                 logging.info(f"Parameter Fetch: Timeout occurred")
                 logging.info("Restarting Service!!")
                 self.parameter_fetch_error = True
+                self.current_step = self.max_time_steps_per_episode
                 self._cleanup()
                 self._start_external_processes(reset_time=False)
             else:
@@ -391,7 +392,7 @@ class CongestionControlEnv(Env):
                 delay=f'{delay}ms',
                 bandwidth=bw,
                 loss=loss
-            ) 
+            )
         )
 
     def report(self):
@@ -435,33 +436,16 @@ class CongestionControlEnv(Env):
 
         return initial_state
 
-    def reward(self, current_traffic_patterns, traffic_timer):
-        elapsed_time_in_period = float(time.time() - traffic_timer) % 8
+    def reward(self):
+        hacked_packets = self.state_statistics[State.ACKED_BYTES_TIMEFRAME][
+            Statistic.EMA]/constants.PACKET_SIZE_KB
 
-        target_goodput = self.current_bandwidth * 125 - self.traffic_generator.mice_flows_kbs
-        time_since_last = time.time() - self.last_step_timestamp
+        rtt_last = self.state_statistics[State.LAST_RTT][Statistic.LAST]
+        rtt_min_ema = self.state_statistics[State.MIN_RTT][Statistic.EMA]
 
-        if 0 <= elapsed_time_in_period <= 2:
-            target_goodput = target_goodput - current_traffic_patterns[0].packets
-        elif 2 < elapsed_time_in_period <= 4:
-            target_goodput = target_goodput - current_traffic_patterns[1].packets
-        elif 4 < elapsed_time_in_period <= 6:
-            target_goodput = target_goodput - current_traffic_patterns[2].packets
-        elif 6 < elapsed_time_in_period < 8:
-            target_goodput = target_goodput - current_traffic_patterns[3].packets
-
-        self.effective_episode += self.state_statistics[State.SENT_GOOD_BYTES_TIMEFRAME][Statistic.LAST]
-        # Count loss for target
-        self.target_episode += target_goodput * time_since_last
-        self.target_episode -= self.target_episode * self.current_loss/100
-
-
-        if self.effective_episode > self.target_episode:
-            reward = - 1 / 2
-        else:
-            reward = - 1 / (1 + (self.effective_episode / self.target_episode))
-
-        logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
+        rtt_ratio = rtt_last/rtt_min_ema
+        eps = 0.1
+        reward = - rtt_ratio/(eps + hacked_packets)
 
         return reward
 
