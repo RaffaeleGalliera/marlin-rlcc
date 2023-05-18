@@ -1,3 +1,5 @@
+import typing
+
 from mininet.cli import CLI
 from mininet.net import Containernet, Mininet
 from mininet.node import Node, Controller
@@ -9,36 +11,13 @@ from mininet.log import info, setLogLevel
 from mininet.node import (Node, Docker, Host, OVSKernelSwitch,
                           DefaultController, Controller, OVSSwitch, OVSBridge)
 
+import rpyc
+from rpyc.utils.server import ThreadedServer
+from rpyc.utils.helpers import classpartial
+
 setLogLevel('info')
-
-
 def pings(mn):
     mn.pingAll()
-
-
-def update_lat(self, lat):
-    # Update latency of the shared link
-    net = self.mn
-    links = net.getNodeByName('ls1').connectionsTo(net.getNodeByName('r0'))
-
-    srcLink = links[0][0]
-    dstLink = links[0][1]
-
-    srcLink.config(delay=lat)
-    dstLink.config(delay=lat)
-
-
-def update_bw(self, bandwidth):
-    # Update latency of the shared link
-    net = self.mn
-    links = net.getNodeByName('ls1').connectionsTo(net.getNodeByName('r0'))
-
-    srcLink = links[0][0]
-    dstLink = links[0][1]
-
-    srcLink.config(bw=int(bandwidth))
-    dstLink.config(bw=int(bandwidth))
-
 
 def cli(mn):
     mn.pingAll()
@@ -109,15 +88,40 @@ class DumbbellTopology(Topo):
         self.addLink(rh1, rs1, intf=TCIntf)
         self.addLink(rh2, rs1, intf=TCIntf)
 
+class MininetService(rpyc.Service):
+    def __init__(self, mininet):
+        self.mininet = mininet
 
-CLI.do_updateLat = update_lat
-CLI.do_updateBw = update_bw
+    def on_connect(self, conn):
+        pass
+    def on_disconnect(self, conn):
+        self.mininet.stop()
+        return "Mininet stopped"
 
-topo = DumbbellTopology()
-net = Mininet(topo=topo, controller=Controller, waitConnected=True)
-net.start()
-cli(net)
-net.stop()
+    def get_links(self, node_1='ls1', node_2='r0'):
+        links = self.mininet.getNodeByName(node_1).connectionsTo(
+            self.mininet.getNodeByName(node_2)
+        )
 
-# tests = { 'cli': cli }
-topos = {'dumbell': (lambda: DumbbellTopology())}
+        return links[0][0], links[0][1]
+
+    def exposed_update_link(self, delay=None, bandwidth=None, loss=None):
+        # Update latency of the shared link
+        src_link, dst_link = self.get_links()
+
+        src_link.config(delay=delay, bw=bandwidth, loss=loss)
+        dst_link.config(delay=delay, bw=bandwidth, loss=loss)
+
+        return f'Changed link to {delay} {bandwidth}Mbit {loss}%'
+
+if __name__ == '__main__':
+    topo = DumbbellTopology()
+    net = Mininet(topo=topo, controller=Controller, waitConnected=True)
+    net.start()
+
+    service = classpartial(MininetService, net)
+    server = ThreadedServer(service, port=18861)
+    info('*** Starting Mininet Service\n')
+    server.start()
+    info('*** Shutting down Mininet Service\n')
+
