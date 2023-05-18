@@ -266,6 +266,7 @@ class CongestionControlEnv(Env):
                 logging.info(f"Parameter Fetch: Timeout occurred")
                 logging.info("Restarting Service!!")
                 self.parameter_fetch_error = True
+                self.current_step = self.max_time_steps_per_episode
                 self._cleanup()
                 self._start_external_processes(reset_time=False)
             else:
