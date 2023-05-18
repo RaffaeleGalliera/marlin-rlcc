@@ -16,7 +16,7 @@ from envs.utils.constants import Parameters, State,Statistic
 import pprint
 import docker
 import netifaces as ni
-
+import rpyc
 from statistics import fmean, stdev
 
 logging.basicConfig(level=logging.INFO)
@@ -56,18 +56,19 @@ class CongestionControlEnv(Env):
                  traffic_generator_ip: str = "10.0.1.2",
                  traffic_receiver_ip: str = "10.0.2.2",
                  grpc_port: int = 50051,
+                 mininet_port: int = 18861,
                  observation_length: int = len(State) * len(Statistic),
                  is_testing: bool = False,
                  max_duration: int = 80,
                  max_time_steps_per_episode: int = 200,
-                 bandwidth_start = 1.0, 
-                 latency_start = 100, 
+                 bandwidth_start = 1.0,
+                 delay_start = 100,
                  loss_start = 0,
-                 bandwidth_var = 0.5, 
-                 latency_var = 10,
+                 bandwidth_var = 0.5,
+                 delay_var = 10,
                  loss_var = 0,
                  variation_range_start = 50,
-                 variation_range_end = 150, 
+                 variation_range_end = 150,
                  random_seed = 1):
         """
         :param eps: the epsilon bound for correct value
@@ -87,12 +88,15 @@ class CongestionControlEnv(Env):
         self.episode_start_time = 0
         self.episode_time = 0
         self.action_delay = 0
+        self.current_bandwidth = 0
+        self.current_delay = 0
+        self.current_loss = 0
         self.bandwidth_start = bandwidth_start
-        self.latency_start = latency_start
+        self.delay_start = delay_start
         self.loss_start = loss_start
         self.n_timestep = n_timesteps
         self.variation_range_start = variation_range_start
-        self.variation_range_end = variation_range_end 
+        self.variation_range_end = variation_range_end
         self._is_testing = is_testing
 
         self.previous_timestamp = 0
@@ -115,6 +119,8 @@ class CongestionControlEnv(Env):
         self.mockets_receiver = self.docker_client.containers.get("mn.rh1")
         self.bg_sender = self.docker_client.containers.get("mn.lh2")
         self.bg_receiver = self.docker_client.containers.get("mn.rh2")
+        self.host_address = ni.ifaddresses('docker0')[ni.AF_INET][0]['addr']
+        self.mininet_connection = rpyc.connect(self.host_address, mininet_port)
         # Prevent zombie Mockets/Mgen processes running on the container
         self.cleanup_containers()
 
@@ -128,18 +134,18 @@ class CongestionControlEnv(Env):
         self.parameter_fetch_error = False
         self._max_duration = max_duration
         self.max_time_steps_per_episode = 500 if self._is_testing else max_time_steps_per_episode
-        
-        #Parameters for random variations link characteristics, bandwidth and latency at the moment
-        
+
+        #Parameters for random variations link characteristics, bandwidth and delay at the moment
+
         self.random_variation_step = self.variation_range_start if self._is_testing else np.random.randint(self.variation_range_start, self.variation_range_end)
         self.bandwidth_var = bandwidth_var
-        self.latency_var = latency_var
+        self.delay_var = delay_var
         self.loss_var = loss_var
 
-        self.traffic_generator = traffic_generator.TrafficGenerator()
+        self.traffic_generator = traffic_generator.TrafficGenerator(link_capacity_mbps=self.bandwidth_start)
         self._traffic_timer = None
         self.episode_training_script = None
-        self.episode_evaluation_script = self.traffic_generator.generate_evaluation_script(receiver_ip=self._traffic_receiver_ip)
+        self.episode_evaluation_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
 
         self.traffic_script = None
         self.target_episode = 0
@@ -358,17 +364,22 @@ class CongestionControlEnv(Env):
         if reset_time:
             self.episode_start_time = time.time()
         logging.info("All commands executed. Episode started!")
-        
 
-    def link_variation(self, bw, latency, loss):
+
+    def link_variation(self, bw, delay, loss):
         #tc commands to change link parameters
-        logging.info("Setting Bandwidth to " + str(bw) + "Mbit and latency to " + str(latency) + "ms in lh1-eth0")
-        self.mockets_sender.exec_run('tc qdisc del dev lh1-eth0 root')
-        print(self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 root handle 5:0 tbf rate ' + str(bw) + 'Mbit burst 15000 limit 100000'))
-        print(self.mockets_sender.exec_run('tc qdisc add dev lh1-eth0 parent 5:0 netem delay ' + str(latency) + 'ms loss ' + str(loss) + '%'))
+        self.current_bandwidth = bw
+        self.current_delay = delay
+        self.current_loss = loss
 
-        logging.info("Link parameters set successfully to " + str(bw) + "Mbit, latency to " + str(latency) + "ms and packet loss to " + str(loss) + '%')
-        
+        logging.info(
+            self.mininet_connection.root.update_link(
+                delay=f'{delay}ms',
+                bandwidth=bw,
+                loss=loss
+            )
+        )
+
     def report(self):
         time_taken = time.time() - self.episode_start_time
         logging.info(f"EPISODE {self.num_resets} {eval_or_train(self._is_testing)} COMPLETED")
@@ -400,13 +411,13 @@ class CongestionControlEnv(Env):
         self.episode_return = 0
         self.target_episode = 0
         self.effective_episode = 0
-        
-        self.link_variation(self.bandwidth_start, self.latency_start, self.loss_start)
+
+        self.link_variation(self.bandwidth_start, self.delay_start, self.loss_start)
 
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
 
-        self.traffic_script = self.traffic_generator.generate_evaluation_script(receiver_ip=self._traffic_receiver_ip) if self._is_testing else self.traffic_generator.generate_training_script(receiver_ip=self._traffic_receiver_ip)
+        self.traffic_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
 
         return initial_state
 
@@ -489,4 +500,3 @@ class CongestionControlEnv(Env):
 
     def render(self, mode: str = "console") -> None:
         pass
-        
