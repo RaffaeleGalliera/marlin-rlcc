@@ -52,9 +52,6 @@ def eval_or_train(is_testing):
 class CongestionControlEnv(Env):
     def __init__(self,
                  n_timesteps: int = 500000,
-                 mockets_server_ip: str = "10.0.2.1",
-                 traffic_generator_ip: str = "10.0.1.2",
-                 traffic_receiver_ip: str = "10.0.2.2",
                  grpc_port: int = 50051,
                  mininet_port: int = 18861,
                  observation_length: int = len(State) * len(Statistic),
@@ -75,6 +72,7 @@ class CongestionControlEnv(Env):
         :param episode_length: the length of each episode in timesteps
         :param observation_lenght: the lenght of the observations
         """
+        self.rank = None
         self.action_space = Box(low=-1, high=+1, shape=(1,), dtype=np.float32)
         self.observation_space = Box(low=-float("inf"),
                                      high=float("inf"),
@@ -106,23 +104,22 @@ class CongestionControlEnv(Env):
         self.state_statistics = dict((stats, dict((stat, 0.0) for stat in Statistic)) for stats in State)
         self.last_state = dict((param, 0.0) for param in State)
 
-        self._mockets_receiver_ip = mockets_server_ip
-        self._traffic_generator_ip = traffic_generator_ip
-        self._traffic_receiver_ip = traffic_receiver_ip
+        self._mockets_receiver_ip = None
+        self._traffic_receiver_ip = None
 
-        self.grpc_port = grpc_port
+        self.grpc_port = None
 
         # Bind to Docker Client
         self.docker_client = docker.from_env()
         # Get containers
-        self.mockets_sender = self.docker_client.containers.get("mn.lh1")
-        self.mockets_receiver = self.docker_client.containers.get("mn.rh1")
-        self.bg_sender = self.docker_client.containers.get("mn.lh2")
-        self.bg_receiver = self.docker_client.containers.get("mn.rh2")
+        self.mockets_sender = None
+        self.mockets_receiver = None
+        self.bg_sender = None
+        self.bg_receiver = None
+
         self.host_address = ni.ifaddresses('docker0')[ni.AF_INET][0]['addr']
         self.mininet_connection = rpyc.connect(self.host_address, mininet_port)
-        # Prevent zombie Mockets/Mgen processes running on the container
-        self.cleanup_containers()
+
 
         # Run server in a different process
         self._server_process = None
@@ -173,6 +170,15 @@ class CongestionControlEnv(Env):
         self.cleanup_mockets()
         self.cleanup_background_traffic()
 
+    def get_containers(self):
+        self.mockets_sender = self.docker_client.containers.get(f"mn.lh{self.rank}")
+        self.mockets_receiver = self.docker_client.containers.get(f"mn.rh{self.rank}")
+        self.bg_sender = self.docker_client.containers.get(f"mn.lh{self.rank + 1}")
+        self.bg_receiver = self.docker_client.containers.get(f"mn.rh{self.rank + 1}")
+
+    def set_ranked_addresses(self):
+        self._mockets_receiver_ip = f'10.0.{self.rank + 1}.1'
+        self._traffic_receiver_ip = f'10.0.{self.rank + 1}.2'
 
     def cleanup_mockets(self):
         shutdown_mockets = ['sh', '-c',
@@ -203,7 +209,6 @@ class CongestionControlEnv(Env):
         self.mockets_sender.exec_run(f"./bin/driver -m {mod} "
                                      f"-address {mockets_receiver_address} "
                                      f"-marlinServer {self.host_address}:{grpc_port}", detach=True)
-
 
     def _run_grpc_server(self, port: int):
         """Run the server process"""
@@ -283,6 +288,16 @@ class CongestionControlEnv(Env):
 
     def _is_finished(self):
         return self.mockets_raw_observations[Parameters.FINISHED]
+
+    def seed(self, ranked_seed):
+        super().seed(ranked_seed)
+
+        self.rank = ranked_seed * 10
+        self.get_containers()
+        self.set_ranked_addresses()
+        # Prevent zombie Mockets/Mgen processes running on the container
+        self.cleanup_containers()
+        self.grpc_port = f'{50051 + self.rank}'
 
     def _get_state(self) -> np.array:
         logging.debug("FETCHING STATE..")
@@ -384,7 +399,9 @@ class CongestionControlEnv(Env):
             self.mininet_connection.root.update_link(
                 delay=f'{delay}ms',
                 bandwidth=bw,
-                loss=loss
+                loss=loss,
+                node_1=f'ls{self.rank}',
+                node_2=f'r{self.rank}'
             )
         )
 

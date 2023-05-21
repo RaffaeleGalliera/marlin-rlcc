@@ -5,17 +5,18 @@ Marlin-v1:
         horizon: 10
   callback:
     - envs.utils.callbacks.TrainingCallback
-  n_timesteps: !!float 1e6
+  n_timesteps: !!float 3e5
+  n_envs: 3
   policy: 'MlpPolicy'
   normalize: "{'norm_obs': True, 'norm_reward': False}"
   learning_rate: !!float 3e-4
-  buffer_size: 500000
+  buffer_size: 150000
   batch_size: 512
   ent_coef: 'auto'
   gamma: 0.99
 #  tau: 0.02
-  train_freq: [1, "episode"]
-  gradient_steps: -1
+  train_freq: 600
+  gradient_steps: 600
   learning_starts: 10000
 #  use_sde: True
   policy_kwargs: "dict(net_arch=[400, 300])"
