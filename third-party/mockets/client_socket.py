@@ -19,6 +19,4 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             total_bytes_sent += BUFFER_SIZE
     print("File sent successfully")
     f.close()
-
-
     s.close()
