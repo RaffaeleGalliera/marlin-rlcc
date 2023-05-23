@@ -1,7 +1,7 @@
 import socket
 import logging
 import argparse
-
+import time
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,14 +19,22 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((args.ip_address, args.port))
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    while True:
+        try:
+            s.connect((args.ip_address, args.port))
+        except ConnectionRefusedError as e:
+            logging.info("Waiting for the socket to be released...")
+            time.sleep(1)
+            continue
+        else:
+            break
 
-        with open(args.file_path, "rb") as f:
-            while True:
-                data = f.read(args.buffer_size)
-                if not data:
-                    break
-                s.sendall(data)
+    with open(args.file_path, "rb") as f:
+        while True:
+            data = f.read(args.buffer_size)
+            if not data:
+                break
+            s.sendall(data)
         f.close()
     s.close()

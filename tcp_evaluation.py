@@ -5,6 +5,7 @@ from envs.utils import traffic_generator
 import docker
 import rpyc
 import netifaces as ni
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
 
@@ -56,14 +57,14 @@ def connect_containers():
 
 
 def start_traffic_generator(traffic_script, docker_traffic_gen):
-    logging.info(f"Script used: {traffic_script}")
+    logging.debug(f"Script used: {traffic_script}")
     docker_traffic_gen.exec_run(f"./mgen {traffic_script}", detach=True)
 
 
 def start_traffic_receiver(docker_traffic_receiver):
-    logging.info("Starting traffic receiver")
+    logging.debug("Starting traffic receiver")
     docker_traffic_receiver.exec_run('./mgen event "listen udp 4311,4312,4600" event "listen tcp 5311,5312"', detach=True)
-    logging.info(f"Receiver started!")
+    logging.debug(f"Receiver started!")
 
 
 def start_background_traffic(script, docker_traffic_gen, docker_traffic_receiver):
@@ -76,10 +77,10 @@ def cleanup_containers(docker_traffic_gen, docker_traffic_receiver):
     shutdown_mgen = ['sh', '-c',
                     "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
-    logging.info("Closing Background traffic connection")
+    logging.debug("Closing Background traffic connection")
     docker_traffic_gen.exec_run(shutdown_mgen)
 
-    logging.info("Closing BG Traffic receiver")
+    logging.debug("Closing BG Traffic receiver")
     docker_traffic_receiver.exec_run(shutdown_mgen)
 
 
@@ -90,13 +91,19 @@ if __name__ == "__main__":
     )
 
     bg_traffic_gen, bg_traffic_receiver, file_sender, file_receiver = connect_containers()
+    mininet_connection = rpyc.connect(ni.ifaddresses('docker0')[ni.AF_INET][0]['addr'], 18861)
 
+    results = []
     for i in range(args.number_of_runs):
         # Start the file receiver in stream mode
         logs_receiver = file_receiver.exec_run(f"python3 /home/app/server_socket.py", stream=True)
 
+        for line in logs_receiver.output:
+            if line == b"INFO:root:Waiting for a connection...\n":
+                logging.info("File receiver ready!")
+                break
+
         # Connect to Containernet and start the link update
-        mininet_connection = rpyc.connect(ni.ifaddresses('docker0')[ni.AF_INET][0]['addr'], 18861)
         timed_link_update = rpyc.async_(mininet_connection.root.timed_link_update)
         future_timed_link_update = timed_link_update(delay_start=args.delay_start,
                                                      bandwidth_start=args.bandwidth_start,
@@ -115,10 +122,10 @@ if __name__ == "__main__":
 
         # Gather the future when it's ready
         logging.info("Waiting for link to be changed")
-        logging.info(future_timed_link_update.value)
+        future_timed_link_update.wait()
 
         # Update the link characteristics and start the new background traffic
-        logging.info("Updating link characteristics")
+        logging.debug("Updated link characteristics")
         traffic_script = traffic_script_gen.generate_script_new_link(
             receiver_ip=args.bg_traffic_receiver_ip,
             factor=args.new_bandwidth / args.bandwidth_start,
@@ -126,4 +133,11 @@ if __name__ == "__main__":
         start_background_traffic(traffic_script, bg_traffic_gen, bg_traffic_receiver)
 
         for line in logs_receiver.output:
-            logging.info("Receiver:" + line.decode('utf-8'))
+            tokens = line.decode('utf-8').split(':')
+            
+            if len(tokens)==4 and tokens[2] == "finished_in":
+                results.append(float(tokens[3]))
+                logging.info(f"Run {i} finished in {float(tokens[3])} seconds!")
+                break
+
+    logging.info(pd.Series(results).describe())

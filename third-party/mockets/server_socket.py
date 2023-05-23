@@ -34,7 +34,7 @@ if __name__ == "__main__":
     logging.info("Waiting for a connection...")
     conn, addr = s.accept()
 
-    logging.info(f"Connected by {addr}")
+    logging.info(f"Connected with {addr}")
     start = time.time()
 
     # Receive data until the connection is closed
