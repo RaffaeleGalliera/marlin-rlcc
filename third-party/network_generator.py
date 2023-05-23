@@ -1,3 +1,4 @@
+import time
 import typing
 
 from mininet.cli import CLI
@@ -107,6 +108,28 @@ class MininetService(rpyc.Service):
         dst_link.config(delay=delay, bw=bandwidth, loss=loss)
 
         return f'Changed link to {delay} {bandwidth}Mbit {loss}%'
+
+    def exposed_timed_link_update(self,
+                                  delay_start=None,
+                                  bandwidth_start=None,
+                                  loss_start=None,
+                                  new_delay=None,
+                                  new_bandwidth=None,
+                                  new_loss=None,
+                                  interval_sec=None):
+        # Update latency of the shared link
+        src_link, dst_link = self.get_links()
+
+        src_link.config(delay=delay_start, bw=bandwidth_start, loss=loss_start)
+        dst_link.config(delay=delay_start, bw=bandwidth_start, loss=loss_start)
+
+        time.sleep(interval_sec)
+
+        src_link.config(delay=new_delay, bw=new_bandwidth, loss=new_loss)
+        dst_link.config(delay=new_delay, bw=new_bandwidth, loss=new_loss)
+
+        return f'Changed link from {delay_start} {bandwidth_start}Mbit {loss_start}%' \
+               f' to {new_delay} {new_bandwidth}Mbit {new_loss}%'
 
 if __name__ == '__main__':
     topo = DumbbellTopology()
