@@ -1,50 +1,51 @@
 import socket
 import time
 import logging
+import argparse
 
-HOST = "10.0.2.1"  # The server's hostname or IP address
-PORT = 65432  # The port used by the server
 
-BUFFER_SIZE = 1024
+logging.basicConfig(level=logging.INFO)
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind((HOST, PORT))
-s.listen()
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ip-address", type=str, default="10.0.2.1")
+    parser.add_argument("--port", type=int, default=65433)
+    parser.add_argument("--buffer-size", type=int, default=1024)
+    parser.add_argument("--file-path", type=str, default="/home/app/test_file_received.iso")
 
-#Time metrics initial values
-times = []
-best = 100
-worst = 0
+    return parser.parse_args()
 
-#TCP connection performance testing
-for x in range(1, 20):
-    logging.info(f"Test no. {x}")
+if __name__ == "__main__":
+    args = parse_args()
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # Try to bind the socket until it is released
+    while True:
+        try:
+            s.bind((args.ip_address, args.port))
+        except OSError as e:
+            logging.info("Waiting for the socket to be released...")
+            time.sleep(1)
+            continue
+        else:
+            break
+    s.listen()
+
     logging.info("Waiting for a connection...")
     conn, addr = s.accept()
-    logging.info(f"Connected by {addr}")
+
+    logging.info(f"Connected with {addr}")
     start = time.time()
-    file_path = "/home/app/test_file_received.iso"
-    total_bytes_received = 0
-    f = open(file_path, "wb")
-    while total_bytes_received < 3*1024*1024:
-        data = conn.recv(BUFFER_SIZE)
+
+    # Receive data until the connection is closed
+    f = open(args.file_path, "wb")
+    while True:
+        data = conn.recv(args.buffer_size)
         if not data:
             break
         f.write(data)
-        total_bytes_received += BUFFER_SIZE
-    logging.info("Total Bytes received: " + str(total_bytes_received) + " - File received successfully\n")
-    finish = (time.time() - start)
-    logging.info(f"Finished in {finish}s")
-    if finish < best:
-        best = finish
-    if finish > worst:
-        worst = finish
-    times.append(finish)
-        
+
+    logging.info(f"finished_in:{(time.time() - start)}")
     f.close()
     conn.close()
-s.close()
-
-logging.info(f"Average Time taken: {sum(times)/len(times)}")
-logging.info(f"Best Time taken: {best}")
-logging.info(f"Worst Time taken: {worst}")
+    s.close()

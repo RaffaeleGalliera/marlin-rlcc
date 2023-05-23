@@ -22,7 +22,8 @@ setup(name='marlin',
           "seaborn",
           "paramiko",
           "scp",
-          "rpyc"
+          "rpyc",
+          "pandas"
       ],
       python_requires=">=3.8.0",
       author="Raffaele Galliera",
