@@ -1,22 +1,32 @@
 import socket
+import logging
+import argparse
 
-BUFFER_SIZE = 1024
 
-HOST = "10.0.2.1"  # The server's hostname or IP address
-PORT = 65432  # The port used by the server
+logging.basicConfig(level=logging.INFO)
 
-filename = "/home/app/test_file.iso"
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.connect((HOST, PORT))
-    with open(filename, "rb") as f:
-        total_bytes_sent = 0
-        while total_bytes_sent < 3*1024*1024:
-            data = f.read(BUFFER_SIZE)
-            if not data:
-                break
-            s.sendall(data)
-            total_bytes_sent += BUFFER_SIZE
-    print("File sent successfully")
-    f.close()
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ip-address", type=str, default="10.0.2.1")
+    parser.add_argument("--port", type=int, default=65433)
+    parser.add_argument("--buffer-size", type=int, default=1024)
+    parser.add_argument("--file-path", type=str, default="/home/app/test_file.iso")
+
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((args.ip_address, args.port))
+
+        with open(args.file_path, "rb") as f:
+            while True:
+                data = f.read(args.buffer_size)
+                if not data:
+                    break
+                s.sendall(data)
+        f.close()
     s.close()
