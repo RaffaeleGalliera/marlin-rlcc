@@ -199,10 +199,10 @@ class CongestionControlEnv(Env):
                          "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
         logging.info("Closing Background traffic connection")
-        self.bg_sender.exec_run(shutdown_mgen, detach=True)
+        self.bg_sender.exec_run(shutdown_mgen)
 
         logging.info("Closing BG Traffic receiver")
-        self.bg_receiver.exec_run(shutdown_mgen, detach=True)
+        self.bg_receiver.exec_run(shutdown_mgen)
 
     def _run_mockets_sender(self, mockets_receiver_address, grpc_port,
                             mockets_logfile):
@@ -444,18 +444,12 @@ class CongestionControlEnv(Env):
         else:
             return False
 
-    def update_bg_traffic(self):
+    def update_link_properties(self):
         self.current_bandwidth = self.bandwidth_var
         self.current_delay = self.delay_var
         self.current_loss = self.loss_var
-
-        self.cleanup_background_traffic()
-        self.traffic_script = self.traffic_generator.generate_script_new_link(
-            receiver_ip=self._traffic_receiver_ip,
-            factor=self.bandwidth_var / self.bandwidth_start
-        )
-        self._start_background_traffic()
-
+        instant = time.time()
+        self._traffic_timer = instant
 
     def step(self, action) -> GymStepReturn:
         self.current_step += 1
@@ -484,7 +478,7 @@ class CongestionControlEnv(Env):
         # Apply link variation if necessary
         if self.variation_pending and self.variation_pending.ready:
             self.variation_pending = None
-            self.update_bg_traffic()
+            self.update_link_properties()
 
         # Action delay in ms
         self.action_delay = (time.time() - self.previous_timestamp) * constants.UNIT_FACTOR
