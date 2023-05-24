@@ -71,6 +71,7 @@ class CongestionControlEnv(Env):
                  variation_range_start: int = 1,
                  variation_range_end: int = 20,
                  variation_interval_test = 10,
+                 kbytes_testing = 500000,
                  random_seed = 1):
         """
         :param eps: the epsilon bound for correct value
@@ -102,6 +103,7 @@ class CongestionControlEnv(Env):
         self._is_testing = is_testing
         self.variation_interval_test = variation_interval_test
 
+        self.kbytes_testing = kbytes_testing
         self.previous_timestamp = 0
         self.timestamp_interval_ms = timestamp_interval_ms
         self.mockets_raw_observations = dict((param, 0.0) for param in Parameters)
@@ -109,7 +111,7 @@ class CongestionControlEnv(Env):
 
         self.state_statistics = dict((stats, dict((stat, 0.0) for stat in Statistic)) for stats in State)
         self.last_state = dict((param, 0.0) for param in State)
-
+        self.acked_bytes = None
         self._mockets_receiver_ip = mockets_server_ip
         self._traffic_generator_ip = traffic_generator_ip
         self._traffic_receiver_ip = traffic_receiver_ip
@@ -209,8 +211,8 @@ class CongestionControlEnv(Env):
         cmd = f"./bin/driver -m {mod} " \
               f"-address {mockets_receiver_address} " \
               f"{f'-congestionUpdate {self.timestamp_interval_ms}' if self.timestamp_interval_ms > 0 else ''} " \
-              f"-marlinServer {self.host_address}:{grpc_port}"
-
+              f"-marlinServer {self.host_address}:{grpc_port} " \
+              f"{f'-episodeBytes f{self.kbytes_testing * 1000}' if self._is_testing > 0 else ''}"
         self.mockets_sender.exec_run(cmd, detach=True)
 
 
@@ -291,7 +293,7 @@ class CongestionControlEnv(Env):
         return self.mockets_raw_observations[Parameters.TIMESTAMP]
 
     def _is_finished(self):
-        return self.mockets_raw_observations[Parameters.FINISHED]
+        return self.mockets_raw_observations[Parameters.FINISHED] or (self._is_testing and self.acked_bytes >= self.kbytes_testing)
 
     def _get_state(self) -> np.array:
         logging.debug("FETCHING STATE..")
@@ -299,6 +301,8 @@ class CongestionControlEnv(Env):
         if not self._is_finished():
             timestamp = self._fetch_param_and_update_stats()
             self._process_additional_params()
+            self.acked_bytes += self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
+
             self.previous_timestamp = timestamp
 
             logging.debug(f"STATE: {self.state_statistics}")
@@ -419,7 +423,7 @@ class CongestionControlEnv(Env):
                                   for param in State for stat in Statistic])
 
         self.traffic_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
-
+        self.acked_bytes = 0
         return initial_state
 
     def reward(self):
@@ -428,8 +432,8 @@ class CongestionControlEnv(Env):
 
         rtt_last = self.state_statistics[State.LAST_RTT][Statistic.LAST]
 
-        rtt_ratio = rtt_last/(self.current_delay * 2)
-        eps = 0.1
+        rtt_ratio = rtt_last/self.current_delay
+        eps = 1
         reward = - rtt_ratio/(eps + hacked_packets)
 
         return reward
