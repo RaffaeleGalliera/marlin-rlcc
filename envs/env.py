@@ -199,10 +199,10 @@ class CongestionControlEnv(Env):
                          "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
         logging.info("Closing Background traffic connection")
-        self.bg_sender.exec_run(shutdown_mgen)
+        self.bg_sender.exec_run(shutdown_mgen, detach=True)
 
         logging.info("Closing BG Traffic receiver")
-        self.bg_receiver.exec_run(shutdown_mgen)
+        self.bg_receiver.exec_run(shutdown_mgen, detach=True)
 
     def _run_mockets_sender(self, mockets_receiver_address, grpc_port,
                             mockets_logfile):
