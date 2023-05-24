@@ -100,7 +100,7 @@ class MininetService(rpyc.Service):
 
         return links[0][0], links[0][1]
 
-    def exposed_update_link(self, delay=None, bandwidth=None, loss=None):
+    def exposed_manual_link_update(self, delay=None, bandwidth=None, loss=None):
         # Update latency of the shared link
         src_link, dst_link = self.get_links()
 
