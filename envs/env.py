@@ -212,7 +212,7 @@ class CongestionControlEnv(Env):
               f"-address {mockets_receiver_address} " \
               f"{f'-congestionUpdate {self.timestamp_interval_ms}' if self.timestamp_interval_ms > 0 else ''} " \
               f"-marlinServer {self.host_address}:{grpc_port} " \
-              f"{f'-episodeBytes f{self.kbytes_testing * 1000}' if self._is_testing > 0 else ''}"
+              f"{f'-episodeBytes {self.kbytes_testing * 1000}' if self._is_testing > 0 else ''}"
         self.mockets_sender.exec_run(cmd, detach=True)
 
 
