@@ -136,11 +136,9 @@ class MininetService(rpyc.Service):
                                   new_loss=None,
                                   interval_sec=None):
         # Resets to normal state and then generate a new script
-        self.script_gen.generate_fixed_script(receiver_ip="10.0.2.2")
-        traffic_script = self.script_gen.generate_script_new_link(
-            receiver_ip="10.0.2.2",
-            factor=new_bandwidth / bandwidth_start,
-        )
+        traffic_script = self.script_gen.generate_fixed_script(receiver_ip="10.0.2.2")
+        cleanup_background_traffic(self.sender, self.receiver)
+        start_traffic(self.sender, self.receiver, traffic_script)
 
         # Update latency of the shared link
         src_link, dst_link = self.get_links()
@@ -153,8 +151,13 @@ class MininetService(rpyc.Service):
         src_link.config(delay=new_delay, bw=new_bandwidth, loss=new_loss)
         dst_link.config(delay=new_delay, bw=new_bandwidth, loss=new_loss)
 
+        traffic_script = self.script_gen.generate_script_new_link(
+            receiver_ip="10.0.2.2",
+            factor=new_bandwidth / bandwidth_start,
+        )
         cleanup_background_traffic(self.sender, self.receiver)
         start_traffic(self.sender, self.receiver, traffic_script)
+
         return f'Changed link from {delay_start} {bandwidth_start}Mbit {loss_start}%' \
                f' to {new_delay} {new_bandwidth}Mbit {new_loss}%'
 

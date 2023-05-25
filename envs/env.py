@@ -9,7 +9,7 @@ from gym.spaces import Box
 from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 
 import grpc_server.congestion_control_server as cc_server
-from envs.utils import constants, traffic_generator
+from envs.utils import constants
 import math
 from envs.utils.constants import Parameters, State,Statistic
 
@@ -53,8 +53,6 @@ class CongestionControlEnv(Env):
     def __init__(self,
                  n_timesteps: int = 500000,
                  mockets_server_ip: str = "10.0.2.1",
-                 traffic_generator_ip: str = "10.0.1.2",
-                 traffic_receiver_ip: str = "10.0.2.2",
                  grpc_port: int = 50051,
                  mininet_port: int = 18861,
                  observation_length: int = len(State) * len(Statistic),
@@ -113,8 +111,6 @@ class CongestionControlEnv(Env):
         self.last_state = dict((param, 0.0) for param in State)
         self.acked_bytes = None
         self._mockets_receiver_ip = mockets_server_ip
-        self._traffic_generator_ip = traffic_generator_ip
-        self._traffic_receiver_ip = traffic_receiver_ip
 
         self.grpc_port = grpc_port
 
@@ -150,12 +146,9 @@ class CongestionControlEnv(Env):
         self.loss_var = loss_var
         self.variation_pending = None
 
-        self.traffic_generator = traffic_generator.TrafficGenerator(link_capacity_mbps=self.bandwidth_start)
         self._traffic_timer = None
         self.episode_training_script = None
-        self.episode_evaluation_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
 
-        self.traffic_script = None
         self.target_episode = 0
         self.effective_episode = 0
         self.last_step_timestamp = None
@@ -179,8 +172,6 @@ class CongestionControlEnv(Env):
 
     def cleanup_containers(self):
         self.cleanup_mockets()
-        self.cleanup_background_traffic()
-
 
     def cleanup_mockets(self):
         shutdown_mockets = ['sh', '-c',
@@ -194,15 +185,6 @@ class CongestionControlEnv(Env):
         logging.info("Closing Mockets Sender connection")
         self.mockets_sender.exec_run(shutdown_mockets)
 
-    def cleanup_background_traffic(self):
-        shutdown_mgen = ['sh', '-c',
-                         "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
-
-        logging.info("Closing Background traffic connection")
-        self.bg_sender.exec_run(shutdown_mgen)
-
-        logging.info("Closing BG Traffic receiver")
-        self.bg_receiver.exec_run(shutdown_mgen)
 
     def _run_mockets_sender(self, mockets_receiver_address, grpc_port,
                             mockets_logfile):
@@ -213,7 +195,7 @@ class CongestionControlEnv(Env):
               f"{f'-congestionUpdate {self.timestamp_interval_ms}' if self.timestamp_interval_ms > 0 else ''} " \
               f"-marlinServer {self.host_address}:{grpc_port} " \
               f"{f'-episodeBytes {self.kbytes_testing * 1000}' if self._is_testing > 0 else ''}"
-        self.mockets_sender.exec_run(cmd, detach=True)
+        return self.mockets_sender.exec_run(cmd, stream=True)
 
 
     def _run_grpc_server(self, port: int):
@@ -339,27 +321,27 @@ class CongestionControlEnv(Env):
 
     def _run_mockets_ep_client(self):
         # Add logging
-        self._run_mockets_sender(self._mockets_receiver_ip,
+        logs = self._run_mockets_sender(self._mockets_receiver_ip,
                                  self.grpc_port, None)
+
+        for line in logs.output:
+            tokens = line.decode('utf-8').split(':')
+            if len(tokens) == 3 and tokens[1] == "STARTED":
+                logging.info(f"Client Connected!")
+                break
 
     def _run_mockets_receiver(self):
         logging.info("Launching Mockets Receiver...")
-        self.mockets_receiver.exec_run('./bin/driver -m server '
-                                       '-address 0.0.0.0', detach=True)
+        logs = self.mockets_receiver.exec_run('./bin/driver -m server '
+                                              '-address 0.0.0.0', stream=True)
+        for line in logs.output:
+            tokens = line.decode('utf-8').split(':')
 
-    def _start_traffic_generator(self):
-        logging.info("Starting Background traffic")
-        logging.info(f"Script used: {self.traffic_script}")
-        self.bg_sender.exec_run(f"./mgen {self.traffic_script}", detach=True)
+            if len(tokens) == 3 and tokens[1] == "READY":
+                logging.info(f"Server ready to accept connections!")
+                break
 
-    def _start_traffic_receiver(self):
-        logging.info("Starting traffic receiver")
-        self.bg_receiver.exec_run('./mgen event "listen udp 4311,4312,4600" event "listen tcp 5311,5312"', detach=True)
-        logging.info(f"Receiver started!")
-
-    def _start_background_traffic(self):
-        self._start_traffic_receiver()
-        self._start_traffic_generator()
+    def _init_background_traffic_timers(self):
         instant = time.time()
         self._traffic_timer = instant
         self.last_step_timestamp = instant
@@ -421,9 +403,8 @@ class CongestionControlEnv(Env):
 
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
-
-        self.traffic_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
         self.acked_bytes = 0
+
         return initial_state
 
     def reward(self):
@@ -459,7 +440,6 @@ class CongestionControlEnv(Env):
             self._start_mockets_processes()
             # New Mockets takes seconds before establishing connection
             self.state = self._next_state()
-            self._start_background_traffic()
             self.variation_pending = self.timed_link_update(
                 delay_start=f"{self.delay_start}ms",
                 bandwidth_start=self.bandwidth_start,
@@ -468,6 +448,7 @@ class CongestionControlEnv(Env):
                 new_bandwidth=self.bandwidth_var,
                 new_loss=self.loss_var,
                 interval_sec=self.variation_interval)
+            self._init_background_traffic_timers()
             self.episode_start_time = time.time()
 
         cwnd_value = self._cwnd_update_throttle(action[0])
