@@ -76,6 +76,7 @@ class CongestionControlEnv(Env):
         :param episode_length: the length of each episode in timesteps
         :param observation_lenght: the lenght of the observations
         """
+        self.current_traffic_patterns = None
         self.action_space = Box(low=-1, high=+1, shape=(1,), dtype=np.float32)
         self.observation_space = Box(low=-float("inf"),
                                      high=float("inf"),
@@ -124,6 +125,7 @@ class CongestionControlEnv(Env):
         self.host_address = ni.ifaddresses('docker0')[ni.AF_INET][0]['addr']
         self.mininet_connection = rpyc.connect(self.host_address, mininet_port)
         self.timed_link_update = rpyc.async_(self.mininet_connection.root.timed_link_update)
+        self.current_mice_flows_kbs = None
         # Prevent zombie Mockets/Mgen processes running on the container
         self.cleanup_containers()
 
@@ -322,21 +324,27 @@ class CongestionControlEnv(Env):
     def _run_mockets_ep_client(self):
         # Add logging
         logs = self._run_mockets_sender(self._mockets_receiver_ip,
-                                 self.grpc_port, None)
+                                        self.grpc_port,
+                                        None)
 
         for line in logs.output:
-            tokens = line.decode('utf-8').split(':')
-            if len(tokens) == 3 and tokens[1] == "STARTED":
+            line = line.decode('utf-8')
+            logging.debug(line)
+
+            tokens = line.split(':')
+            if len(tokens) == 3 and tokens[1] == "READY":
                 logging.info(f"Client Connected!")
                 break
 
     def _run_mockets_receiver(self):
         logging.info("Launching Mockets Receiver...")
         logs = self.mockets_receiver.exec_run('./bin/driver -m server '
-                                              '-address 0.0.0.0', stream=True)
+                                              f'-address {self._mockets_receiver_ip}', stream=True)
         for line in logs.output:
-            tokens = line.decode('utf-8').split(':')
+            line = line.decode('utf-8')
+            logging.debug(line)
 
+            tokens = line.split(':')
             if len(tokens) == 3 and tokens[1] == "READY":
                 logging.info(f"Server ready to accept connections!")
                 break
@@ -404,18 +412,39 @@ class CongestionControlEnv(Env):
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
         self.acked_bytes = 0
+        self.current_mice_flows_kbs = self.bandwidth_start * .08
+        self.current_traffic_patterns = [self.bandwidth_start * 125  * .4, self.bandwidth_start * 125  * .8, self.bandwidth_start * 125  * .4, self.bandwidth_start * 125  * .208]
+        logging.info("Traffic patterns: " + str(self.current_traffic_patterns))
 
         return initial_state
 
     def reward(self):
-        hacked_packets = self.state_statistics[State.ACKED_BYTES_TIMEFRAME][
-            Statistic.EMA]/constants.PACKET_SIZE_KB
+        elapsed_time_in_period = float(time.time() - self._traffic_timer) % 8
+        current_bandwidth_kbs = self.current_bandwidth * 125
+        target_goodput = current_bandwidth_kbs - self.current_mice_flows_kbs
+        time_since_last = time.time() - self.last_step_timestamp
 
-        rtt_last = self.state_statistics[State.LAST_RTT][Statistic.LAST]
+        if 0 <= elapsed_time_in_period <= 2:
+            target_goodput = target_goodput - self.current_traffic_patterns[0]
+        elif 2 < elapsed_time_in_period <= 4:
+            target_goodput = target_goodput - self.current_traffic_patterns[1]
+        elif 4 < elapsed_time_in_period <= 6:
+            target_goodput = target_goodput - self.current_traffic_patterns[2]
+        elif 6 < elapsed_time_in_period < 8:
+            target_goodput = target_goodput - self.current_traffic_patterns[3]
 
-        rtt_ratio = rtt_last/self.current_delay
-        eps = 1
-        reward = - rtt_ratio/(eps + hacked_packets)
+        self.effective_episode += self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
+        # Count loss for target
+        self.target_episode += target_goodput * time_since_last
+        self.target_episode -= self.target_episode * self.current_loss/100
+
+
+        if self.effective_episode > self.target_episode:
+            reward = - 1 / 2
+        else:
+            reward = - 1 / (1 + (self.effective_episode / self.target_episode))
+
+        logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
 
         return reward
 
@@ -429,6 +458,9 @@ class CongestionControlEnv(Env):
         self.current_bandwidth = self.bandwidth_var
         self.current_delay = self.delay_var
         self.current_loss = self.loss_var
+        self.current_mice_flows_kbs *= self.bandwidth_var / self.bandwidth_start
+        self.current_traffic_patterns = [self.bandwidth_var * 125 * .8, self.bandwidth_var * 125  * .208, self.bandwidth_var * 125  * .8, self.bandwidth_var * 125  * 0.208]
+        logging.info("Traffic patterns: " + str(self.current_traffic_patterns))
         instant = time.time()
         self._traffic_timer = instant
 
