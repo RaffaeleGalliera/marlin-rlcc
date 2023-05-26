@@ -435,9 +435,7 @@ class CongestionControlEnv(Env):
 
         self.effective_episode += self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
         # Count loss for target
-        self.target_episode += target_goodput * time_since_last
-        self.target_episode -= self.target_episode * self.current_loss/100
-
+        self.target_episode += target_goodput * time_since_last * (1 - self.current_loss / 100)
 
         if self.effective_episode > self.target_episode:
             reward = - 1 / 2
