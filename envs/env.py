@@ -407,7 +407,7 @@ class CongestionControlEnv(Env):
         self.current_delay = self.delay_start
         self.current_loss = self.loss_start
         self.mininet_connection.root.manual_link_update(bandwidth=self.current_bandwidth, delay=f"{self.current_delay}ms", loss=self.current_loss)
-        self.variation_interval = self.variation_interval_test if self._is_testing else np.random.randint(self.variation_range_start, self.variation_range_end)
+        self.variation_interval = self.variation_interval_test
 
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
@@ -436,11 +436,11 @@ class CongestionControlEnv(Env):
         self.effective_episode += self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
         # Count loss for target
         self.target_episode += target_goodput * time_since_last * (1 - self.current_loss / 100)
-
+        rtt_penalty = self.state_statistics[State.LAST_RTT][Statistic.LAST] / (self.current_delay * 2)
         if self.effective_episode > self.target_episode:
-            reward = - 1 / 2
+            reward = - rtt_penalty / 2
         else:
-            reward = - 1 / (1 + (self.effective_episode / self.target_episode))
+            reward = - rtt_penalty / (1 + (self.effective_episode / self.target_episode))
 
         logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
 
