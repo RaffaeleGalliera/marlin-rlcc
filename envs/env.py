@@ -69,7 +69,7 @@ class CongestionControlEnv(Env):
                  variation_range_start: int = 1,
                  variation_range_end: int = 20,
                  variation_interval_test = 10,
-                 kbytes_testing = 500000,
+                 kbytes_testing = 500,
                  random_seed = 1):
         """
         :param eps: the epsilon bound for correct value
@@ -377,6 +377,7 @@ class CongestionControlEnv(Env):
         logging.info(f"Stats: {pprint.pformat(self.state_statistics)}")
         logging.info(f"Steps taken during episode: {self.current_step}")
         logging.info(f"Return accumulated: {self.episode_return}")
+        logging.info(f"Acked bytes since beginning: {self.acked_bytes}")
         logging.info(f"Time taken: {time_taken}")
         logging.info("-------------------------------------")
 
