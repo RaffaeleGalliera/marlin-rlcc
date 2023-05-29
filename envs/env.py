@@ -9,7 +9,7 @@ from gym.spaces import Box
 from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
 
 import grpc_server.congestion_control_server as cc_server
-from envs.utils import constants, traffic_generator
+from envs.utils import constants
 import math
 from envs.utils.constants import Parameters, State,Statistic
 
@@ -53,28 +53,30 @@ class CongestionControlEnv(Env):
     def __init__(self,
                  n_timesteps: int = 500000,
                  mockets_server_ip: str = "10.0.2.1",
-                 traffic_generator_ip: str = "10.0.1.2",
-                 traffic_receiver_ip: str = "10.0.2.2",
                  grpc_port: int = 50051,
                  mininet_port: int = 18861,
                  observation_length: int = len(State) * len(Statistic),
                  is_testing: bool = False,
                  max_duration: int = 80,
                  max_time_steps_per_episode: int = 200,
+                 timestamp_interval_ms: int = 0,
                  bandwidth_start = 1.0,
                  delay_start = 100,
                  loss_start = 0,
                  bandwidth_var = 0.5,
                  delay_var = 10,
                  loss_var = 0,
-                 variation_range_start = 50,
-                 variation_range_end = 150,
+                 variation_range_start: int = 1,
+                 variation_range_end: int = 20,
+                 variation_interval_test = 10,
+                 kbytes_testing = 500,
                  random_seed = 1):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
         :param observation_lenght: the lenght of the observations
         """
+        self.current_traffic_patterns = None
         self.action_space = Box(low=-1, high=+1, shape=(1,), dtype=np.float32)
         self.observation_space = Box(low=-float("inf"),
                                      high=float("inf"),
@@ -98,17 +100,18 @@ class CongestionControlEnv(Env):
         self.variation_range_start = variation_range_start
         self.variation_range_end = variation_range_end
         self._is_testing = is_testing
+        self.variation_interval_test = variation_interval_test
 
+        self.kbytes_testing = kbytes_testing
         self.previous_timestamp = 0
+        self.timestamp_interval_ms = timestamp_interval_ms
         self.mockets_raw_observations = dict((param, 0.0) for param in Parameters)
         self.processed_observations_history = dict((param, [0.0]) for param in State)
 
         self.state_statistics = dict((stats, dict((stat, 0.0) for stat in Statistic)) for stats in State)
         self.last_state = dict((param, 0.0) for param in State)
-
+        self.acked_bytes = None
         self._mockets_receiver_ip = mockets_server_ip
-        self._traffic_generator_ip = traffic_generator_ip
-        self._traffic_receiver_ip = traffic_receiver_ip
 
         self.grpc_port = grpc_port
 
@@ -121,6 +124,8 @@ class CongestionControlEnv(Env):
         self.bg_receiver = self.docker_client.containers.get("mn.rh2")
         self.host_address = ni.ifaddresses('docker0')[ni.AF_INET][0]['addr']
         self.mininet_connection = rpyc.connect(self.host_address, mininet_port)
+        self.timed_link_update = rpyc.async_(self.mininet_connection.root.timed_link_update)
+        self.current_mice_flows_kbs = None
         # Prevent zombie Mockets/Mgen processes running on the container
         self.cleanup_containers()
 
@@ -137,17 +142,15 @@ class CongestionControlEnv(Env):
 
         #Parameters for random variations link characteristics, bandwidth and delay at the moment
 
-        self.random_variation_step = self.variation_range_start if self._is_testing else np.random.randint(self.variation_range_start, self.variation_range_end)
+        self.variation_interval = None
         self.bandwidth_var = bandwidth_var
         self.delay_var = delay_var
         self.loss_var = loss_var
+        self.variation_pending = None
 
-        self.traffic_generator = traffic_generator.TrafficGenerator(link_capacity_mbps=self.bandwidth_start)
         self._traffic_timer = None
         self.episode_training_script = None
-        self.episode_evaluation_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
 
-        self.traffic_script = None
         self.target_episode = 0
         self.effective_episode = 0
         self.last_step_timestamp = None
@@ -171,8 +174,6 @@ class CongestionControlEnv(Env):
 
     def cleanup_containers(self):
         self.cleanup_mockets()
-        self.cleanup_background_traffic()
-
 
     def cleanup_mockets(self):
         shutdown_mockets = ['sh', '-c',
@@ -186,23 +187,17 @@ class CongestionControlEnv(Env):
         logging.info("Closing Mockets Sender connection")
         self.mockets_sender.exec_run(shutdown_mockets)
 
-    def cleanup_background_traffic(self):
-        shutdown_mgen = ['sh', '-c',
-                         "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
-
-        logging.info("Closing Background traffic connection")
-        self.bg_sender.exec_run(shutdown_mgen)
-
-        logging.info("Closing BG Traffic receiver")
-        self.bg_receiver.exec_run(shutdown_mgen)
 
     def _run_mockets_sender(self, mockets_receiver_address, grpc_port,
                             mockets_logfile):
         logging.info("Launching Mockets Sender...")
         mod = 'client_training' if self._is_testing else 'client_test'
-        self.mockets_sender.exec_run(f"./bin/driver -m {mod} "
-                                     f"-address {mockets_receiver_address} "
-                                     f"-marlinServer {self.host_address}:{grpc_port}", detach=True)
+        cmd = f"./bin/driver -m {mod} " \
+              f"-address {mockets_receiver_address} " \
+              f"{f'-congestionUpdate {self.timestamp_interval_ms}' if self.timestamp_interval_ms > 0 else ''} " \
+              f"-marlinServer {self.host_address}:{grpc_port} " \
+              f"{f'-episodeBytes {self.kbytes_testing * 1000}' if self._is_testing > 0 else ''}"
+        return self.mockets_sender.exec_run(cmd, stream=True)
 
 
     def _run_grpc_server(self, port: int):
@@ -268,7 +263,7 @@ class CongestionControlEnv(Env):
                 self.parameter_fetch_error = True
                 self.current_step = self.max_time_steps_per_episode
                 self._cleanup()
-                self._start_external_processes(reset_time=False)
+                self._start_mockets_processes()
             else:
                 break
 
@@ -282,7 +277,7 @@ class CongestionControlEnv(Env):
         return self.mockets_raw_observations[Parameters.TIMESTAMP]
 
     def _is_finished(self):
-        return self.mockets_raw_observations[Parameters.FINISHED]
+        return self.mockets_raw_observations[Parameters.FINISHED] or (self._is_testing and self.acked_bytes >= self.kbytes_testing)
 
     def _get_state(self) -> np.array:
         logging.debug("FETCHING STATE..")
@@ -290,6 +285,8 @@ class CongestionControlEnv(Env):
         if not self._is_finished():
             timestamp = self._fetch_param_and_update_stats()
             self._process_additional_params()
+            self.acked_bytes += self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
+
             self.previous_timestamp = timestamp
 
             logging.debug(f"STATE: {self.state_statistics}")
@@ -306,10 +303,7 @@ class CongestionControlEnv(Env):
         self._action_queue.put(action)
 
     def _get_reward(self) -> float:
-        reward = self.reward(
-            current_traffic_patterns=self.traffic_generator.current_patterns,
-            traffic_timer=self._traffic_timer
-        )
+        reward = self.reward()
         self.episode_return += reward
 
         return reward
@@ -329,27 +323,33 @@ class CongestionControlEnv(Env):
 
     def _run_mockets_ep_client(self):
         # Add logging
-        self._run_mockets_sender(self._mockets_receiver_ip,
-                                 self.grpc_port, None)
+        logs = self._run_mockets_sender(self._mockets_receiver_ip,
+                                        self.grpc_port,
+                                        None)
+
+        for line in logs.output:
+            line = line.decode('utf-8')
+            logging.debug(line)
+
+            tokens = line.split(':')
+            if len(tokens) == 3 and tokens[1] == "READY":
+                logging.info(f"Client Connected!")
+                break
 
     def _run_mockets_receiver(self):
         logging.info("Launching Mockets Receiver...")
-        self.mockets_receiver.exec_run('./bin/driver -m server '
-                                       '-address 0.0.0.0', detach=True)
+        logs = self.mockets_receiver.exec_run('./bin/driver -m server '
+                                              f'-address {self._mockets_receiver_ip}', stream=True)
+        for line in logs.output:
+            line = line.decode('utf-8')
+            logging.debug(line)
 
-    def _start_traffic_generator(self):
-        logging.info("Starting Background traffic")
-        logging.info(f"Script used: {self.traffic_script}")
-        self.bg_sender.exec_run(f"./mgen {self.traffic_script}", detach=True)
+            tokens = line.split(':')
+            if len(tokens) == 3 and tokens[1] == "READY":
+                logging.info(f"Server ready to accept connections!")
+                break
 
-    def _start_traffic_receiver(self):
-        logging.info("Starting traffic receiver")
-        self.bg_receiver.exec_run('./mgen event "listen udp 4311,4312,4600" event "listen tcp 5311,5312"', detach=True)
-        logging.info(f"Receiver started!")
-
-    def _start_background_traffic(self):
-        self._start_traffic_receiver()
-        self._start_traffic_generator()
+    def _init_background_traffic_timers(self):
         instant = time.time()
         self._traffic_timer = instant
         self.last_step_timestamp = instant
@@ -358,7 +358,7 @@ class CongestionControlEnv(Env):
         # You gotta clean your stuff sometimes
         self.__del__()
 
-    def _start_external_processes(self, reset_time=True):
+    def _start_mockets_processes(self, reset_time=True):
         logging.info("-------------------------------------")
         logging.info(f"STARTED EPISODE {self.num_resets} {eval_or_train(self._is_testing)}")
         self._state_queue = Queue()
@@ -366,27 +366,10 @@ class CongestionControlEnv(Env):
 
         self._run_grpc_server(self.grpc_port)
         self._run_mockets_receiver()
-        self._start_background_traffic()
         self._run_mockets_ep_client()
 
-        if reset_time:
-            self.episode_start_time = time.time()
+        logging.info(f"Current variation at {self.variation_interval}s")
         logging.info("All commands executed. Episode started!")
-
-
-    def link_variation(self, bw, delay, loss):
-        #tc commands to change link parameters
-        self.current_bandwidth = bw
-        self.current_delay = delay
-        self.current_loss = loss
-
-        logging.info(
-            self.mininet_connection.root.update_link(
-                delay=f'{delay}ms',
-                bandwidth=bw,
-                loss=loss
-            )
-        )
 
     def report(self):
         time_taken = time.time() - self.episode_start_time
@@ -394,6 +377,7 @@ class CongestionControlEnv(Env):
         logging.info(f"Stats: {pprint.pformat(self.state_statistics)}")
         logging.info(f"Steps taken during episode: {self.current_step}")
         logging.info(f"Return accumulated: {self.episode_return}")
+        logging.info(f"Acked bytes since beginning: {self.acked_bytes}")
         logging.info(f"Time taken: {time_taken}")
         logging.info("-------------------------------------")
 
@@ -420,40 +404,44 @@ class CongestionControlEnv(Env):
         self.target_episode = 0
         self.effective_episode = 0
 
-        self.link_variation(self.bandwidth_start, self.delay_start, self.loss_start)
+        self.current_bandwidth = self.bandwidth_start
+        self.current_delay = self.delay_start
+        self.current_loss = self.loss_start
+        self.mininet_connection.root.manual_link_update(bandwidth=self.current_bandwidth, delay=f"{self.current_delay}ms", loss=self.current_loss)
+        self.variation_interval = self.variation_interval_test
 
         initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
                                   for param in State for stat in Statistic])
-
-        self.traffic_script = self.traffic_generator.generate_fixed_script(receiver_ip=self._traffic_receiver_ip)
+        self.acked_bytes = 0
+        self.current_mice_flows_kbs = self.bandwidth_start * .08
+        self.current_traffic_patterns = [self.bandwidth_start * 125  * .4, self.bandwidth_start * 125  * .8, self.bandwidth_start * 125  * .4, self.bandwidth_start * 125  * .208]
+        logging.info("Traffic patterns: " + str(self.current_traffic_patterns))
 
         return initial_state
 
-    def reward(self, current_traffic_patterns, traffic_timer):
-        elapsed_time_in_period = float(time.time() - traffic_timer) % 8
-
-        target_goodput = self.current_bandwidth * 125 - self.traffic_generator.mice_flows_kbs
+    def reward(self):
+        elapsed_time_in_period = float(time.time() - self._traffic_timer) % 8
+        current_bandwidth_kbs = self.current_bandwidth * 125
+        target_goodput = current_bandwidth_kbs - self.current_mice_flows_kbs
         time_since_last = time.time() - self.last_step_timestamp
 
         if 0 <= elapsed_time_in_period <= 2:
-            target_goodput = target_goodput - current_traffic_patterns[0].packets
+            target_goodput = target_goodput - self.current_traffic_patterns[0]
         elif 2 < elapsed_time_in_period <= 4:
-            target_goodput = target_goodput - current_traffic_patterns[1].packets
+            target_goodput = target_goodput - self.current_traffic_patterns[1]
         elif 4 < elapsed_time_in_period <= 6:
-            target_goodput = target_goodput - current_traffic_patterns[2].packets
+            target_goodput = target_goodput - self.current_traffic_patterns[2]
         elif 6 < elapsed_time_in_period < 8:
-            target_goodput = target_goodput - current_traffic_patterns[3].packets
+            target_goodput = target_goodput - self.current_traffic_patterns[3]
 
-        self.effective_episode += self.state_statistics[State.SENT_GOOD_BYTES_TIMEFRAME][Statistic.LAST]
+        self.effective_episode += self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
         # Count loss for target
-        self.target_episode += target_goodput * time_since_last
-        self.target_episode -= self.target_episode * self.current_loss/100
-
-
+        self.target_episode += target_goodput * time_since_last * (1 - self.current_loss / 100)
+        rtt_penalty = self.state_statistics[State.LAST_RTT][Statistic.LAST] / (self.current_delay * 2)
         if self.effective_episode > self.target_episode:
-            reward = - 1 / 2
+            reward = - rtt_penalty / 2
         else:
-            reward = - 1 / (1 + (self.effective_episode / self.target_episode))
+            reward = - rtt_penalty / (1 + (self.effective_episode / self.target_episode))
 
         logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
 
@@ -465,28 +453,44 @@ class CongestionControlEnv(Env):
         else:
             return False
 
+    def update_link_properties(self):
+        self.current_bandwidth = self.bandwidth_var
+        self.current_delay = self.delay_var
+        self.current_loss = self.loss_var
+        self.current_mice_flows_kbs *= self.bandwidth_var / self.bandwidth_start
+        self.current_traffic_patterns = [self.bandwidth_var * 125 * .8, self.bandwidth_var * 125  * .208, self.bandwidth_var * 125  * .8, self.bandwidth_var * 125  * 0.208]
+        logging.info("Traffic patterns: " + str(self.current_traffic_patterns))
+        instant = time.time()
+        self._traffic_timer = instant
+
     def step(self, action) -> GymStepReturn:
         self.current_step += 1
         self.total_steps += 1
-
         #TODO: Try to move this step to reset() method somehow
         if self.current_step == 1:
-            self._start_external_processes()
+            self._start_mockets_processes()
+            # New Mockets takes seconds before establishing connection
             self.state = self._next_state()
-
-        if self.current_step == self.random_variation_step:
-            self.link_variation(self.bandwidth_var, self.delay_var, self.loss_var)
-            self.cleanup_background_traffic()
-            self.traffic_script = self.traffic_generator.generate_script_new_link(
-                receiver_ip=self._traffic_receiver_ip,
-                factor=self.bandwidth_var/self.bandwidth_start
-            )
-            self._start_background_traffic()
+            self.variation_pending = self.timed_link_update(
+                delay_start=f"{self.delay_start}ms",
+                bandwidth_start=self.bandwidth_start,
+                loss_start=self.loss_start,
+                new_delay=f"{self.delay_var}ms",
+                new_bandwidth=self.bandwidth_var,
+                new_loss=self.loss_var,
+                interval_sec=self.variation_interval)
+            self._init_background_traffic_timers()
+            self.episode_start_time = time.time()
 
         cwnd_value = self._cwnd_update_throttle(action[0])
 
         # CWND value must be in Bytes
         self._put_action(cwnd_value)
+
+        # Apply link variation if necessary
+        if self.variation_pending and self.variation_pending.ready:
+            self.variation_pending = None
+            self.update_link_properties()
 
         # Action delay in ms
         self.action_delay = (time.time() - self.previous_timestamp) * constants.UNIT_FACTOR

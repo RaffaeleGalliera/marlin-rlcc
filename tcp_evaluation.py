@@ -45,43 +45,9 @@ def connect_containers():
     logging.debug("Connecting to File Receiver")
     file_receiver_container = get_container("mn.rh1", docker_client)
 
-    logging.debug("Connecting to Background Traffic Generator")
-    bg_traffic_gen_container = get_container("mn.lh2", docker_client)
-
-    logging.debug("Connecting to Background Traffic Receiver")
-    bg_traffic_receiver_container = get_container("mn.rh2", docker_client)
-
     logging.info("Containers connected!")
 
-    return bg_traffic_gen_container, bg_traffic_receiver_container, file_sender_container, file_receiver_container
-
-
-def start_traffic_generator(traffic_script, docker_traffic_gen):
-    logging.debug(f"Script used: {traffic_script}")
-    docker_traffic_gen.exec_run(f"./mgen {traffic_script}", detach=True)
-
-
-def start_traffic_receiver(docker_traffic_receiver):
-    logging.debug("Starting traffic receiver")
-    docker_traffic_receiver.exec_run('./mgen event "listen udp 4311,4312,4600" event "listen tcp 5311,5312"', detach=True)
-    logging.debug(f"Receiver started!")
-
-
-def start_background_traffic(script, docker_traffic_gen, docker_traffic_receiver):
-    cleanup_containers(docker_traffic_gen, docker_traffic_receiver)
-    start_traffic_receiver(docker_traffic_receiver)
-    start_traffic_generator(script, docker_traffic_gen)
-
-
-def cleanup_containers(docker_traffic_gen, docker_traffic_receiver):
-    shutdown_mgen = ['sh', '-c',
-                    "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
-
-    logging.debug("Closing Background traffic connection")
-    docker_traffic_gen.exec_run(shutdown_mgen)
-
-    logging.debug("Closing BG Traffic receiver")
-    docker_traffic_receiver.exec_run(shutdown_mgen)
+    return file_sender_container, file_receiver_container
 
 
 if __name__ == "__main__":
@@ -90,7 +56,7 @@ if __name__ == "__main__":
         link_capacity_mbps=args.bandwidth_start
     )
 
-    bg_traffic_gen, bg_traffic_receiver, file_sender, file_receiver = connect_containers()
+    file_sender, file_receiver = connect_containers()
     mininet_connection = rpyc.connect(ni.ifaddresses('docker0')[ni.AF_INET][0]['addr'], 18861)
 
     results = []
@@ -113,24 +79,13 @@ if __name__ == "__main__":
                                                      new_loss=args.new_loss,
                                                      interval_sec=args.variation_interval)
 
-        # Start the background traffic
-        traffic_script = traffic_script_gen.generate_fixed_script(receiver_ip=args.bg_traffic_receiver_ip)
-        start_background_traffic(traffic_script, bg_traffic_gen, bg_traffic_receiver)
-
         # Start the file transfer
         file_sender.exec_run(f"python3 /home/app/client_socket.py", detach=True)
 
         # Gather the future when it's ready
         logging.info("Waiting for link to be changed")
         future_timed_link_update.wait()
-
-        # Update the link characteristics and start the new background traffic
         logging.debug("Updated link characteristics")
-        traffic_script = traffic_script_gen.generate_script_new_link(
-            receiver_ip=args.bg_traffic_receiver_ip,
-            factor=args.new_bandwidth / args.bandwidth_start,
-        )
-        start_background_traffic(traffic_script, bg_traffic_gen, bg_traffic_receiver)
 
         for line in logs_receiver.output:
             tokens = line.decode('utf-8').split(':')

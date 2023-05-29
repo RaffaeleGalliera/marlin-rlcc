@@ -15,8 +15,23 @@ from mininet.node import (Node, Docker, Host, OVSKernelSwitch,
 import rpyc
 from rpyc.utils.server import ThreadedServer
 from rpyc.utils.helpers import classpartial
+import docker
+import envs.utils.traffic_generator as tg
 
 setLogLevel('info')
+
+
+def cleanup_background_traffic(sender, receiver):
+    shutdown_mgen = ['sh', '-c',
+                     "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
+
+    sender.exec_run(shutdown_mgen)
+    receiver.exec_run(shutdown_mgen)
+
+def start_traffic(sender, receiver, traffic_script):
+    receiver.exec_run('./mgen event "listen udp 4311,4312,4600" event "listen tcp 5311,5312"', detach=True)
+    sender.exec_run(f"./mgen {traffic_script}", detach=True)
+
 
 class LinuxRouter(Node):
     # A Node with IP forwarding enabled.
@@ -83,8 +98,11 @@ class DumbbellTopology(Topo):
         self.addLink(rh2, rs1, intf=TCIntf)
 
 class MininetService(rpyc.Service):
-    def __init__(self, mininet):
+    def __init__(self, mininet, sender, receiver, script_gen):
         self.mininet = mininet
+        self.sender = sender
+        self.receiver = receiver
+        self.script_gen = script_gen
 
     def on_connect(self, conn):
         pass
@@ -100,7 +118,7 @@ class MininetService(rpyc.Service):
 
         return links[0][0], links[0][1]
 
-    def exposed_update_link(self, delay=None, bandwidth=None, loss=None):
+    def exposed_manual_link_update(self, delay=None, bandwidth=None, loss=None):
         # Update latency of the shared link
         src_link, dst_link = self.get_links()
 
@@ -117,6 +135,11 @@ class MininetService(rpyc.Service):
                                   new_bandwidth=None,
                                   new_loss=None,
                                   interval_sec=None):
+        # Resets to normal state and then generate a new script
+        traffic_script = self.script_gen.generate_fixed_script(receiver_ip="10.0.2.2")
+        cleanup_background_traffic(self.sender, self.receiver)
+        start_traffic(self.sender, self.receiver, traffic_script)
+
         # Update latency of the shared link
         src_link, dst_link = self.get_links()
 
@@ -128,6 +151,13 @@ class MininetService(rpyc.Service):
         src_link.config(delay=new_delay, bw=new_bandwidth, loss=new_loss)
         dst_link.config(delay=new_delay, bw=new_bandwidth, loss=new_loss)
 
+        traffic_script = self.script_gen.generate_script_new_link(
+            receiver_ip="10.0.2.2",
+            factor=new_bandwidth / bandwidth_start,
+        )
+        cleanup_background_traffic(self.sender, self.receiver)
+        start_traffic(self.sender, self.receiver, traffic_script)
+
         return f'Changed link from {delay_start} {bandwidth_start}Mbit {loss_start}%' \
                f' to {new_delay} {new_bandwidth}Mbit {new_loss}%'
 
@@ -135,8 +165,13 @@ if __name__ == '__main__':
     topo = DumbbellTopology()
     net = Mininet(topo=topo, controller=Controller, waitConnected=True)
     net.start()
+    docker_client = docker.from_env()
 
-    service = classpartial(MininetService, net)
+    traffic_script_gen = tg.TrafficGenerator()
+    bg_sender = docker_client.containers.get("mn.lh2")
+    bg_receiver = docker_client.containers.get("mn.rh2")
+
+    service = classpartial(MininetService, net, bg_sender, bg_receiver, traffic_script_gen)
     server = ThreadedServer(service, port=18861)
     info('*** Starting Mininet Service\n')
     server.start()

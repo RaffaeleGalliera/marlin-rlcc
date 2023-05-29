@@ -45,7 +45,9 @@ if __name__ == "__main__":
             break
         f.write(data)
 
-    logging.info(f"finished_in:{(time.time() - start)}")
     f.close()
     conn.close()
     s.close()
+
+    logging.info(f"finished_in:{(time.time() - start)}")
+
