@@ -437,11 +437,11 @@ class CongestionControlEnv(Env):
         self.effective_episode += self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
         # Count loss for target
         self.target_episode += target_goodput * time_since_last * (1 - self.current_loss / 100)
-        rtt_penalty = self.state_statistics[State.LAST_RTT][Statistic.LAST] / (self.current_delay * 2)
+        retransmissions_penalty = 1 + self.state_statistics[State.RETRANSMISSIONS][Statistic.LAST] * (1 - self.current_loss/100)
         if self.effective_episode > self.target_episode:
-            reward = - rtt_penalty / 2
+            reward = - retransmissions_penalty / 2
         else:
-            reward = - rtt_penalty / (1 + (self.effective_episode / self.target_episode))
+            reward = - retransmissions_penalty / (1 + (self.effective_episode / self.target_episode))
 
         logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
 
