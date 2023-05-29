@@ -53,10 +53,10 @@ class State(Enum):
     RETRANSMISSIONS = 9
 
     LAST_RTT = 12
-    # MIN_RTT = 13
-    # MAX_RTT = 14
-    # SRTT = 15
-    # VAR_RTT = 16
+    MIN_RTT = 13
+    MAX_RTT = 14
+    SRTT = 15
+    VAR_RTT = 16
 
     ACKED_BYTES_TIMEFRAME = 19
 
