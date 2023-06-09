@@ -155,7 +155,6 @@ class CongestionControlEnv(Env):
         self.effective_episode = 0
         self.last_step_timestamp = None
 
-        # self.reset()
 
     def __del__(self):
         """Book-keeping to release resources"""
@@ -233,7 +232,6 @@ class CongestionControlEnv(Env):
 
         # Gather statistics from the observation history, dictionaries from
         # observation history share the same first level key of state statistics
-        # TODO: Cleanup all that list slicing to avoid the zeros you don't want
         for key, value in self.processed_observations_history.items():
             # Skip RTT Fetch if communication is finished and value was not
             # computed
@@ -437,11 +435,11 @@ class CongestionControlEnv(Env):
         self.effective_episode += self.state_statistics[State.ACKED_BYTES_TIMEFRAME][Statistic.LAST]
         # Count loss for target
         self.target_episode += target_goodput * time_since_last * (1 - self.current_loss / 100)
-        rtt_penalty = self.state_statistics[State.LAST_RTT][Statistic.LAST] / (self.current_delay * 2)
+        retransmissions_penalty = 1 + self.state_statistics[State.RETRANSMISSIONS][Statistic.LAST] * (1 - self.current_loss/100)
         if self.effective_episode > self.target_episode:
-            reward = - rtt_penalty / 2
+            reward = - retransmissions_penalty / 2
         else:
-            reward = - rtt_penalty / (1 + (self.effective_episode / self.target_episode))
+            reward = - retransmissions_penalty / (1 + (self.effective_episode / self.target_episode))
 
         logging.debug(f"Time since last {time_since_last}, Effective {self.effective_episode}, Target {self.target_episode}  Reward {reward}")
 
