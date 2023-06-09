@@ -66,30 +66,6 @@ class State(Enum):
 
     PACKETS_TRANSMITTED = 103
 
-
-# TODO: 'rtt_standing',  # Min RTT over
-# win of size
-# srtt/2 ??
-# TODO: 'rtx_bytes',  # Number of bytes
-# retransmitted since last ACK
-# TODO: 'lost_bytes',  # Number of bytes
-# lost in
-# this loss
-# TODO:'rtx_count',  # Number of pakcets
-# retransmitted since last ACK
-# TODO: 'timeout_based_rtx_count',
-# Number of
-# Retransmissions due to PTO since last ACK
-# TODO: 'pto_count',  # Number of times
-# packet
-# loss timer fired before receiving an ACK
-# TODO: 'total_pto_count',  # Number of times
-# packet loss timer fired since last ACK
-# TODO: 'persistent_congestion'  # Flag
-# indicating whether persistent congestion
-# is detected
-
-
 MAXIMUM_SEGMENT_SIZE = None
 # Increment/Decrement in % to be applied to the cwnd
 ALPHA = 1 / 8  # Alfa for EMA
@@ -98,5 +74,3 @@ CWND_UPPER_LIMIT_BYTES = 150000
 LINK_BANDWIDTH_KB = 150
 PACKET_SIZE_KB = 1.444
 UNIT_FACTOR = 1000
-DIST_PATH = '/code/marlin/mockets_distributions'
-ACTIONS = (1, 0.33, 0.05, -0.05, -0.33, 0)

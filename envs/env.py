@@ -155,7 +155,6 @@ class CongestionControlEnv(Env):
         self.effective_episode = 0
         self.last_step_timestamp = None
 
-        # self.reset()
 
     def __del__(self):
         """Book-keeping to release resources"""
@@ -233,7 +232,6 @@ class CongestionControlEnv(Env):
 
         # Gather statistics from the observation history, dictionaries from
         # observation history share the same first level key of state statistics
-        # TODO: Cleanup all that list slicing to avoid the zeros you don't want
         for key, value in self.processed_observations_history.items():
             # Skip RTT Fetch if communication is finished and value was not
             # computed
