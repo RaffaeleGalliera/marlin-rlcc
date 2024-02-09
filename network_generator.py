@@ -22,8 +22,7 @@ setLogLevel('info')
 
 
 def cleanup_background_traffic(sender, receiver):
-    shutdown_mgen = ['sh', '-c',
-                     "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
+    shutdown_mgen = ['sh', '-c', "ps -ef | grep 'mgen' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
     sender.exec_run(shutdown_mgen)
     receiver.exec_run(shutdown_mgen)
@@ -61,29 +60,37 @@ class DumbbellTopology(Topo):
         rs1 = self.addSwitch('rs1')
 
         # Add hosts
-        lh1 = self.addHost('lh1',
-                           cls=Docker,
-                           ip='10.0.1.1/24',
-                           defaultRoute='via 10.0.1.254',
-                           dimage='mockets:0.1')
+        lh1 = self.addHost(
+            'lh1',
+            cls=Docker,
+            ip='10.0.1.1/24',
+            defaultRoute='via 10.0.1.254',
+            dimage='mockets:0.1'
+        )
 
-        lh2 = self.addHost('lh2',
-                           cls=Docker,
-                           ip='10.0.1.2/24',
-                           defaultRoute='via 10.0.1.254',
-                           dimage='mgen:0.1')
+        lh2 = self.addHost(
+            'lh2',
+            cls=Docker,
+            ip='10.0.1.2/24',
+            defaultRoute='via 10.0.1.254',
+            dimage='mgen:0.1'
+        )
 
-        rh1 = self.addHost('rh1',
-                           cls=Docker,
-                           ip='10.0.2.1/24',
-                           defaultRoute='via 10.0.2.254',
-                           dimage='mockets:0.1')
+        rh1 = self.addHost(
+            'rh1',
+            cls=Docker,
+            ip='10.0.2.1/24',
+            defaultRoute='via 10.0.2.254',
+            dimage='mockets:0.1'
+        )
 
-        rh2 = self.addHost('rh2',
-                           cls=Docker,
-                           ip='10.0.2.2/24',
-                           defaultRoute='via 10.0.2.254',
-                           dimage='mgen:0.1')
+        rh2 = self.addHost(
+            'rh2',
+            cls=Docker,
+            ip='10.0.2.2/24',
+            defaultRoute='via 10.0.2.254',
+            dimage='mgen:0.1'
+        )
 
         # Add links
         info('*** Connect the switches to the router\n')
@@ -127,14 +134,16 @@ class MininetService(rpyc.Service):
 
         return f'Changed link to {delay} {bandwidth}Mbit {loss}%'
 
-    def exposed_timed_link_update(self,
-                                  delay_start=None,
-                                  bandwidth_start=None,
-                                  loss_start=None,
-                                  new_delay=None,
-                                  new_bandwidth=None,
-                                  new_loss=None,
-                                  interval_sec=None):
+    def exposed_timed_link_update(
+            self,
+            delay_start=None,
+            bandwidth_start=None,
+            loss_start=None,
+            new_delay=None,
+            new_bandwidth=None,
+            new_loss=None,
+            interval_sec=None
+    ):
         # Resets to normal state and then generate a new script
         traffic_script = self.script_gen.generate_fixed_script(receiver_ip="10.0.2.2")
         cleanup_background_traffic(self.sender, self.receiver)

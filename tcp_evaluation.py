@@ -71,13 +71,15 @@ if __name__ == "__main__":
 
         # Connect to Containernet and start the link update
         timed_link_update = rpyc.async_(mininet_connection.root.timed_link_update)
-        future_timed_link_update = timed_link_update(delay_start=args.delay_start,
-                                                     bandwidth_start=args.bandwidth_start,
-                                                     loss_start=args.loss_start,
-                                                     new_delay=args.new_delay,
-                                                     new_bandwidth=args.new_bandwidth,
-                                                     new_loss=args.new_loss,
-                                                     interval_sec=args.variation_interval)
+        future_timed_link_update = timed_link_update(
+            delay_start=args.delay_start,
+            bandwidth_start=args.bandwidth_start,
+            loss_start=args.loss_start,
+            new_delay=args.new_delay,
+            new_bandwidth=args.new_bandwidth,
+            new_loss=args.new_loss,
+            interval_sec=args.variation_interval
+        )
 
         # Start the file transfer
         file_sender.exec_run(f"python3 /home/app/client_socket.py", detach=True)
