@@ -24,21 +24,31 @@ class TrafficGenerator:
         self.seed = seed
         self.n_episode = 0
         self.link_capacity_kilo_bytes_ps = link_capacity_mbps * 125
-        self.tcp_elephant = TrafficPattern(self.link_capacity_kilo_bytes_ps * .8,
-                                           "TCP",
-                                           5311)
-        self.udp_elephant = TrafficPattern(self.link_capacity_kilo_bytes_ps * .4,
-                                           "UDP",
-                                           4311)
-        self.tcp_mice = TrafficPattern(self.link_capacity_kilo_bytes_ps * .001332,
-                                       "TCP",
-                                       5312)
-        self.udp_mice = TrafficPattern(self.link_capacity_kilo_bytes_ps * .2,
-                                       "UDP",
-                                       4312)
-        self.extra_udp = TrafficPattern(self.link_capacity_kilo_bytes_ps * .208,
-                                        "UDP",
-                                        4600)
+        self.tcp_elephant = TrafficPattern(
+            self.link_capacity_kilo_bytes_ps * .8,
+            "TCP",
+            5311
+        )
+        self.udp_elephant = TrafficPattern(
+            self.link_capacity_kilo_bytes_ps * .4,
+            "UDP",
+            4311
+        )
+        self.tcp_mice = TrafficPattern(
+            self.link_capacity_kilo_bytes_ps * .001332,
+            "TCP",
+            5312
+        )
+        self.udp_mice = TrafficPattern(
+            self.link_capacity_kilo_bytes_ps * .2,
+            "UDP",
+            4312
+        )
+        self.extra_udp = TrafficPattern(
+            self.link_capacity_kilo_bytes_ps * .208,
+            "UDP",
+            4600
+        )
         self.mice_flows_kbs = self.link_capacity_kilo_bytes_ps * .08
 
         self.traffic_patterns = (self.udp_elephant, self.tcp_elephant, self.udp_elephant, self.extra_udp)

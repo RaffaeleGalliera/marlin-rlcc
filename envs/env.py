@@ -50,27 +50,29 @@ def eval_or_train(is_testing):
 
 
 class CongestionControlEnv(Env):
-    def __init__(self,
-                 n_timesteps: int = 500000,
-                 mockets_server_ip: str = "10.0.2.1",
-                 grpc_port: int = 50051,
-                 mininet_port: int = 18861,
-                 observation_length: int = len(State) * len(Statistic),
-                 is_testing: bool = False,
-                 max_duration: int = 80,
-                 max_time_steps_per_episode: int = 200,
-                 timestamp_interval_ms: int = 0,
-                 bandwidth_start = 1.0,
-                 delay_start = 100,
-                 loss_start = 0,
-                 bandwidth_var = 0.5,
-                 delay_var = 10,
-                 loss_var = 0,
-                 variation_range_start: int = 1,
-                 variation_range_end: int = 20,
-                 variation_interval_test = 10,
-                 kbytes_testing = 500,
-                 random_seed = 1):
+    def __init__(
+            self,
+            n_timesteps: int = 500000,
+            mockets_server_ip: str = "10.0.2.1",
+            grpc_port: int = 50051,
+            mininet_port: int = 18861,
+            observation_length: int = len(State) * len(Statistic),
+            is_testing: bool = False,
+            max_duration: int = 80,
+            max_time_steps_per_episode: int = 200,
+            timestamp_interval_ms: int = 0,
+            bandwidth_start = 1.0,
+            delay_start = 100,
+            loss_start = 0,
+            bandwidth_var = 0.5,
+            delay_var = 10,
+            loss_var = 0,
+            variation_range_start: int = 1,
+            variation_range_end: int = 20,
+            variation_interval_test = 10,
+            kbytes_testing = 500,
+            random_seed = 1
+    ):
         """
         :param eps: the epsilon bound for correct value
         :param episode_length: the length of each episode in timesteps
@@ -78,9 +80,7 @@ class CongestionControlEnv(Env):
         """
         self.current_traffic_patterns = None
         self.action_space = Box(low=-1, high=+1, shape=(1,), dtype=np.float32)
-        self.observation_space = Box(low=-float("inf"),
-                                     high=float("inf"),
-                                     shape=(observation_length, ))
+        self.observation_space = Box(low=-float("inf"), high=float("inf"), shape=(observation_length, ))
 
         np.random.seed(random_seed)
         self.current_step = 0
@@ -175,8 +175,7 @@ class CongestionControlEnv(Env):
         self.cleanup_mockets()
 
     def cleanup_mockets(self):
-        shutdown_mockets = ['sh', '-c',
-                            "ps -ef | grep 'mockets' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
+        shutdown_mockets = ['sh', '-c', "ps -ef | grep 'mockets' | grep -v grep | awk '{print $2}' | xargs -r kill -9"]
 
         logging.info(f"Closing process for {eval_or_train(self._is_testing)}")
 
@@ -240,16 +239,11 @@ class CongestionControlEnv(Env):
             self.state_statistics[key][Statistic.EMA] = \
                 exponential_moving_average(self.state_statistics[key][
                                                Statistic.EMA], value[-1])
-            self.state_statistics[key][Statistic.MIN] = min(value[1:]) if\
-                len(value) > 2 else value[-1]
-            self.state_statistics[key][Statistic.MAX] = max(value[1:]) if\
-                len(value) > 2 else value[-1]
-            self.state_statistics[key][Statistic.MEAN] = fmean(value[1:]) if\
-                len(value) > 2 else value[-1]
-            self.state_statistics[key][Statistic.STD] = stdev(value[1:]) if\
-                len(value) > 2 else value[-1]
-            self.state_statistics[key][Statistic.DIFF] = value[-1] - value[-2] if \
-                len(value) > 2 else value[-1]
+            self.state_statistics[key][Statistic.MIN] = min(value[1:]) if len(value) > 2 else value[-1]
+            self.state_statistics[key][Statistic.MAX] = max(value[1:]) if len(value) > 2 else value[-1]
+            self.state_statistics[key][Statistic.MEAN] = fmean(value[1:]) if len(value) > 2 else value[-1]
+            self.state_statistics[key][Statistic.STD] = stdev(value[1:]) if len(value) > 2 else value[-1]
+            self.state_statistics[key][Statistic.DIFF] = value[-1] - value[-2] if len(value) > 2 else value[-1]
 
     def _fetch_param_and_update_stats(self) -> int:
         while True:
@@ -336,8 +330,10 @@ class CongestionControlEnv(Env):
 
     def _run_mockets_receiver(self):
         logging.info("Launching Mockets Receiver...")
-        logs = self.mockets_receiver.exec_run('./bin/driver -m server '
-                                              f'-address {self._mockets_receiver_ip}', stream=True)
+        logs = self.mockets_receiver.exec_run(
+            './bin/driver -m server '
+            f'-address {self._mockets_receiver_ip}', stream=True
+        )
         for line in logs.output:
             line = line.decode('utf-8')
             logging.debug(line)
@@ -405,14 +401,27 @@ class CongestionControlEnv(Env):
         self.current_bandwidth = self.bandwidth_start
         self.current_delay = self.delay_start
         self.current_loss = self.loss_start
-        self.mininet_connection.root.manual_link_update(bandwidth=self.current_bandwidth, delay=f"{self.current_delay}ms", loss=self.current_loss)
+        self.mininet_connection.root.manual_link_update(
+            bandwidth=self.current_bandwidth,
+            delay=f"{self.current_delay}ms",
+            loss=self.current_loss
+        )
         self.variation_interval = self.variation_interval_test
 
-        initial_state = np.array([self.state_statistics[State(param.value)][Statistic(stat.value)]
-                                  for param in State for stat in Statistic])
+        initial_state = np.array(
+            [
+                self.state_statistics[State(param.value)][Statistic(stat.value)]
+                for param in State for stat in Statistic
+            ]
+        )
         self.acked_bytes = 0
         self.current_mice_flows_kbs = self.bandwidth_start * .08
-        self.current_traffic_patterns = [self.bandwidth_start * 125  * .4, self.bandwidth_start * 125  * .8, self.bandwidth_start * 125  * .4, self.bandwidth_start * 125  * .208]
+        self.current_traffic_patterns = [
+            self.bandwidth_start * 125  * .4,
+            self.bandwidth_start * 125  * .8,
+            self.bandwidth_start * 125  * .4,
+            self.bandwidth_start * 125  * .208
+        ]
         logging.info("Traffic patterns: " + str(self.current_traffic_patterns))
 
         return initial_state
@@ -456,7 +465,12 @@ class CongestionControlEnv(Env):
         self.current_delay = self.delay_var
         self.current_loss = self.loss_var
         self.current_mice_flows_kbs *= self.bandwidth_var / self.bandwidth_start
-        self.current_traffic_patterns = [self.bandwidth_var * 125 * .8, self.bandwidth_var * 125  * .208, self.bandwidth_var * 125  * .8, self.bandwidth_var * 125  * 0.208]
+        self.current_traffic_patterns = [
+            self.bandwidth_var * 125 * .8,
+            self.bandwidth_var * 125  * .208,
+            self.bandwidth_var * 125  * .8,
+            self.bandwidth_var * 125  * 0.208
+        ]
         logging.info("Traffic patterns: " + str(self.current_traffic_patterns))
         instant = time.time()
         self._traffic_timer = instant
@@ -476,7 +490,8 @@ class CongestionControlEnv(Env):
                 new_delay=f"{self.delay_var}ms",
                 new_bandwidth=self.bandwidth_var,
                 new_loss=self.loss_var,
-                interval_sec=self.variation_interval)
+                interval_sec=self.variation_interval
+            )
             self._init_background_traffic_timers()
             self.episode_start_time = time.time()
 
