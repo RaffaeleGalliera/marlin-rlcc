@@ -13,7 +13,7 @@ An example of network topology can be found in `/third_party/network_generator.p
 3. Run `git submodule update --init` after cloning for pulling dependencies
 4. Build the Image `docker build -t marlin:0.1 .`
 5. Start your ContainerNet topology (or use the default found in `third_party`) `sudo python3 network_generator.py`
-6. Run the container (with local binding for dev) `docker run --gpus all --ipc=host -v /var/run/docker.sock:/var/run/docker.sock -v ${PWD}:/home/devuser/dev:Z -it --rm marlin:0.1`
+6. Run the container (with local binding for dev) `docker run --gpus all --ipc=host --network host -v /var/run/docker.sock:/var/run/docker.sock -v ${PWD}:/home/devuser/dev:Z -it --rm marlin:0.1`
 7. Example of command for running the agent `python third-party/rl-baselines3-zoo/train.py --algo sac --env Marlin-v1 --track --wandb-project-name your-project-name --eval-freq 50 --eval-episodes 10 --env-kwargs delay_start:500 bandwidth_var:0.256 delay_var:125 loss_var:3 max_duration:800`
 
 ## Test a trained agent agent
