@@ -19,10 +19,13 @@ An example of network topology can be found in `/third_party/network_generator.p
 ## Test a trained agent agent
 Run `python third-party/rl-baselines3-zoo/enjoy.py --algo sac --seed 9 --env Marlin-v1 --n-episodes 100  -f results/ --env-kwargs kbytes_testing:600 bandwidth_start:1 delay_start:500 bandwidth_var:0.256 delay_var:125 loss_var:3 max_duration:80 variation_interval_test:10 timestamp_interval_ms:100 is_testing:True`
 
-
 ## If you are using Mockets, MGEN, and `network_generator.py`
 Remember to build the respective `mgen` and `mockets` images found in their respective subfolders in `third_party` naming them `mgen:0.1` and `mockets:0.1`.
 
 ## When updating the statistics/state you also need to generate a new protobuf go to the project's root folder:
 1. `python -m grpc_tools.protoc -I. --python_out=./protos --grpc_python_out=./protos protos/congestion_control.proto`
 2. `mv protos/protos/* protos && rm -rf protos/protos`
+
+
+## ContainerNet Installation Fix
+If you are having trouble with the installation of ContainerNet, you can try the following link: [ContainerNet Installation Fix](https://github.com/containernet/containernet/issues/259)
