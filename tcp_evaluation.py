@@ -1,11 +1,15 @@
 import logging
 import sys
+import os
 import argparse
 from envs.utils import traffic_generator
 import docker
 import rpyc
 import netifaces as ni
 import pandas as pd
+import pyshark
+import multiprocessing
+from statistics import mean
 
 logging.basicConfig(level=logging.INFO)
 
@@ -50,6 +54,48 @@ def connect_containers():
     return file_sender_container, file_receiver_container
 
 
+def capture_interface(output_file, interface):
+    captured_interface = pyshark.LiveCapture(interface=interface, output_file=output_file)
+
+    logging.info("Interface " + interface + " captured correctly")
+
+    return captured_interface
+
+
+def capture_packets(capture, stop_event):
+    for packet in capture.sniff_continuously():
+        if stop_event.is_set():
+            break
+
+
+def count_episodic_retransmissions(captured_packets_file):
+    retransmissions = 0
+    capture_retransmissions = pyshark.FileCapture(captured_packets_file, display_filter="tcp.analysis.retransmission")
+
+    for packet in capture_retransmissions:
+        retransmissions += 1
+
+    return retransmissions
+
+
+def measure_episodic_rtt(captured_packets_file):
+    rtt = 0
+    captured_packets = pyshark.FileCapture(captured_packets_file)
+    for packet in captured_packets:
+        if 'TCP' in packet:
+            tcp = packet['TCP']
+            try:
+                rtt += float(packet.tcp.analysis_ack_rtt)
+            except AttributeError:
+                rtt += 0
+    
+    return rtt
+
+
+def stop_capture(capture):
+    capture.close()
+
+
 if __name__ == "__main__":
     args = parse_args()
     traffic_script_gen = traffic_generator.TrafficGenerator(
@@ -60,8 +106,20 @@ if __name__ == "__main__":
     mininet_connection = rpyc.connect(ni.ifaddresses('docker0')[ni.AF_INET][0]['addr'], 18861)
 
     results = []
+    episodic_retransmissions = []
+    episodic_rtt = []
+    stop_event = multiprocessing.Event()
     for i in range(args.number_of_runs):
         # Start the file receiver in stream mode
+        capture_ls1 = capture_interface("outputLs1.pcap", 'ls1-eth2')
+        capture_rs1 = capture_interface("outputRs1.pcap", 'rs1-eth1')
+
+        #Start packets capture
+        capture_process_ls1 = multiprocessing.Process(target=capture_packets, args=(capture_ls1, stop_event))
+        capture_process_rs1 = multiprocessing.Process(target=capture_packets, args=(capture_rs1, stop_event))
+        capture_process_ls1.start()
+        capture_process_rs1.start()
+
         logs_receiver = file_receiver.exec_run(f"python3 /home/app/server_socket.py", stream=True)
 
         for line in logs_receiver.output:
@@ -96,5 +154,25 @@ if __name__ == "__main__":
                 results.append(float(tokens[3]))
                 logging.info(f"Run {i} finished in {float(tokens[3])} seconds!")
                 break
+        
+        # Stop the packets capture on both interfaces and calculate 
+        # episodic retransmission and rtt
+        stop_capture(capture_ls1)
+        stop_capture(capture_rs1)
+        stop_event.set()
+        capture_process_ls1.join()
+        capture_process_rs1.join()
+        capture_process_ls1.terminate()
+        capture_process_rs1.terminate()
+        episodic_retransmissions.append(count_episodic_retransmissions("outputLs1.pcap") + count_episodic_retransmissions("outputRs1.pcap"))
+        episodic_rtt.append(measure_episodic_rtt("outputLs1.pcap") + measure_episodic_rtt("outputRs1.pcap"))
+        os.remove("outputLs1.pcap")
+        os.remove("outputRs1.pcap")
 
     logging.info(pd.Series(results).describe())
+
+    #Just for debugging
+    print(episodic_retransmissions)
+    print(mean(episodic_retransmissions))
+    print(episodic_rtt)
+    print(mean(episodic_rtt))
