@@ -16,6 +16,7 @@ scp
 rpyc~=5.3.1
 
 gym~=0.26.1
+gymnasium~=0.29.1
 optuna~=3.0.2
 torch~=1.12.1
 setuptools~=65.3.0
